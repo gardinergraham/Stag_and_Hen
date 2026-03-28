@@ -1,0 +1,102 @@
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import Constants from 'expo-constants';
+
+// Backend URL from environment variable (required for production)
+// In Expo, use Constants.expoConfig.extra or process.env
+const getBackendUrl = () => {
+  // Check Expo config first, then process.env
+  const envUrl = Constants.expoConfig?.extra?.backendUrl || process.env.EXPO_PUBLIC_BACKEND_URL;
+  if (!envUrl) {
+    console.warn('EXPO_PUBLIC_BACKEND_URL not set, using preview URL');
+    return 'https://group-event-hub.preview.emergentagent.com';
+  }
+  return envUrl;
+};
+
+const API_BASE_URL = `${getBackendUrl()}/api`;
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Events API
+export const eventsApi = {
+  create: (data) => api.post('/events/', data),
+  getAll: () => api.get('/events/'),
+  getById: (eventId) => api.get(`/events/${eventId}`),
+  update: (eventId, data, ownerPin) => 
+    api.put(`/events/${eventId}?owner_pin=${ownerPin}`, data),
+  delete: (eventId, ownerPin) => 
+    api.delete(`/events/${eventId}?owner_pin=${ownerPin}`),
+  getQRCode: (eventId, ownerPin) => 
+    api.get(`/events/${eventId}/qr-code?owner_pin=${ownerPin}`),
+  getMembers: (eventId) => api.get(`/events/${eventId}/members`),
+};
+
+// Auth API
+export const authApi = {
+  accessViaQR: (data) => api.post('/auth/access-qr', data),
+  accessManual: (data) => api.post('/auth/access-manual', data),
+  ownerLogin: (data) => api.post('/auth/owner-login', data),
+};
+
+// Media API
+export const mediaApi = {
+  upload: (data) => api.post('/media/', data),
+  getByEvent: (eventId) => api.get(`/media/event/${eventId}`),
+  getById: (mediaId) => api.get(`/media/${mediaId}`),
+  delete: (mediaId, memberName) => 
+    api.delete(`/media/${mediaId}?member_name=${memberName}`),
+};
+
+// Shop API
+export const shopApi = {
+  getItems: (category) => {
+    const url = category ? `/shop/items?category=${category}` : '/shop/items';
+    return api.get(url);
+  },
+  getCategories: () => api.get('/shop/categories'),
+  trackClick: (itemId, memberName, eventId) => 
+    api.post(`/shop/track-click/${itemId}?member_name=${memberName}&event_id=${eventId}`),
+};
+
+// Kitty API
+export const kittyApi = {
+  contribute: (data) => api.post('/kitty/contribute', data),
+  withdraw: (data) => api.post('/kitty/withdraw', data),
+  getBalance: (eventId) => api.get(`/kitty/balance/${eventId}`),
+  getTransactions: (eventId) => api.get(`/kitty/transactions/${eventId}`),
+};
+
+// Session Storage
+export const sessionStorage = {
+  async saveSession(data) {
+    await AsyncStorage.setItem('session', JSON.stringify(data));
+  },
+  
+  async getSession() {
+    const data = await AsyncStorage.getItem('session');
+    return data ? JSON.parse(data) : null;
+  },
+  
+  async clearSession() {
+    await AsyncStorage.removeItem('session');
+  },
+  
+  async saveEventDetails(eventId, data) {
+    await AsyncStorage.setItem(`event_${eventId}`, JSON.stringify(data));
+  },
+  
+  async getEventDetails(eventId) {
+    const data = await AsyncStorage.getItem(`event_${eventId}`);
+    return data ? JSON.parse(data) : null;
+  },
+};
+
+export default api;

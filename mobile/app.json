@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "The Stag & Hen",
+    "slug": "stag-and-hen",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/logo.jpg",
+    "userInterfaceStyle": "dark",
+    "scheme": "stagandhen",
+    "splash": {
+      "image": "./assets/logo.jpg",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0A"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.stagandhen.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "We need camera access to scan QR codes and take photos for the party gallery.",
+        "NSPhotoLibraryUsageDescription": "We need photo library access to upload and save party photos."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo.jpg",
+        "backgroundColor": "#0A0A0A"
+      },
+      "package": "com.stagandhen.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/logo.jpg"
+    },
+    "plugins": [
+      "expo-camera",
+      "expo-image-picker",
+      "expo-media-library",
+      "expo-barcode-scanner"
+    ],
+    "extra": {
+      "backendUrl": "https://group-event-hub.preview.emergentagent.com",
+      "eas": {
+        "projectId": "your-project-id"
+      }
+    }
+  }
+}

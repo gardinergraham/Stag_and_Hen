@@ -1,8 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException,UploadFile, File
 from typing import List
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from datetime import datetime, timedelta, timezone
+from services.s3 import upload_bytes_to_s3
 
 from models.media import Media, MediaCreate
 
@@ -133,3 +134,19 @@ async def delete_media(media_id: str, member_name: str):
     await db.media.update_one({"id": media_id}, {"$set": {"is_deleted": True}})
     
     return {"message": "Media deleted successfully"}
+
+
+@router.post("/upload-file")
+async def upload_file_to_s3(file: UploadFile = File(...)):
+    try:
+        contents = await file.read()
+
+        file_url = upload_bytes_to_s3(
+            file_bytes=contents,
+            filename=file.filename or "upload.jpg",
+            content_type=file.content_type or "application/octet-stream",
+        )
+
+        return {"file_url": file_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")

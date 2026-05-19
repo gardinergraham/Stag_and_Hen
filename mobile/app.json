@@ -39,13 +39,11 @@
       "expo-camera",
       "expo-image-picker",
       "expo-media-library",
-      "expo-barcode-scanner"
+      "expo-barcode-scanner",
+      "expo-asset"
     ],
     "extra": {
-      "backendUrl": "https://group-event-hub.preview.emergentagent.com",
-      "eas": {
-        "projectId": "your-project-id"
-      }
+      "backendUrl": "https://stagandhen-production.up.railway.app"
     }
   }
 }

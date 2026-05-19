@@ -8,7 +8,7 @@ const WelcomeScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Image
-          source={require('../../assets/logo.jpg')}
+          source={require('../../assets/logo.png')}
           style={styles.logo}
           resizeMode="contain"
         />
@@ -49,6 +49,13 @@ const WelcomeScreen = ({ navigation }) => {
           variant="secondary"
           size="medium"
           onPress={() => navigation.navigate('OwnerLogin')}
+          style={styles.ownerButton}
+        />
+        <Button
+          title="Admin Login"
+          variant="outline"
+          size="medium"
+          onPress={() => navigation.navigate('AdminLogin')}
           style={styles.ownerButton}
         />
       </View>

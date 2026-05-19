@@ -13,6 +13,20 @@ import { Button, TextInput } from '../components';
 import { authApi } from '../services/api';
 import { useApp } from '../context/AppContext';
 
+const decodeQrPayload = (encodedPayload) => {
+  const paddedPayload = encodedPayload.padEnd(
+    encodedPayload.length + ((4 - (encodedPayload.length % 4)) % 4),
+    '='
+  );
+  const base64Payload = paddedPayload.replace(/-/g, '+').replace(/_/g, '/');
+
+  if (typeof atob === 'function') {
+    return JSON.parse(atob(base64Payload));
+  }
+
+  throw new Error('Base64 decoding is not available on this device.');
+};
+
 const ScanQRScreen = ({ navigation }) => {
   const { login } = useApp();
   const [permission, requestPermission] = useCameraPermissions();
@@ -30,7 +44,7 @@ const ScanQRScreen = ({ navigation }) => {
       // Parse QR data (format: stagandhen://join?data=base64)
       if (data.startsWith('stagandhen://join?data=')) {
         const encoded = data.split('data=')[1];
-        const decoded = JSON.parse(atob(encoded.replace(/-/g, '+').replace(/_/g, '/')));
+        const decoded = decodeQrPayload(encoded);
         setQrData(decoded);
         setShowNameInput(true);
       } else {

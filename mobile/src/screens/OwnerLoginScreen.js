@@ -5,6 +5,10 @@ import {
   StyleSheet,
   SafeAreaView,
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from 'react-native';
 import { colors, typography, spacing } from '../theme';
 import { Button, TextInput } from '../components';
@@ -18,6 +22,13 @@ const OwnerLoginScreen = ({ navigation }) => {
     event_name: '',
     owner_pin: '',
   });
+
+  const handlePinChange = (owner_pin) => {
+    setForm({ ...form, owner_pin });
+    if (owner_pin.length >= 4) {
+      Keyboard.dismiss();
+    }
+  };
 
   const handleLogin = async () => {
     if (!form.event_name || !form.owner_pin) {
@@ -36,6 +47,8 @@ const OwnerLoginScreen = ({ navigation }) => {
         event_type: data.event_type,
         member_name: data.member_name,
         role: 'owner',
+        owner_pin: data.owner_pin || form.owner_pin,
+        access_pin: data.access_pin,
       });
 
       Alert.alert(
@@ -52,39 +65,44 @@ const OwnerLoginScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Owner Login</Text>
-        <Text style={styles.subtitle}>
-          Access your event with your owner PIN
-        </Text>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <Text style={styles.title}>Owner Login</Text>
+          <Text style={styles.subtitle}>
+            Access your event with your owner PIN
+          </Text>
 
-        <TextInput
-          label="Event Name"
-          placeholder="Your event name"
-          value={form.event_name}
-          onChangeText={(text) => setForm({ ...form, event_name: text })}
-          autoCapitalize="words"
-        />
+          <TextInput
+            label="Event Name"
+            placeholder="Your event name"
+            value={form.event_name}
+            onChangeText={(text) => setForm({ ...form, event_name: text })}
+            autoCapitalize="words"
+          />
 
-        <TextInput
-          label="Owner PIN"
-          placeholder="Your 4-digit owner PIN"
-          value={form.owner_pin}
-          onChangeText={(text) => setForm({ ...form, owner_pin: text })}
-          keyboardType="number-pad"
-          maxLength={4}
-          secureTextEntry
-        />
+          <TextInput
+            label="Owner PIN"
+            placeholder="Your 4-digit owner PIN"
+            value={form.owner_pin}
+            onChangeText={handlePinChange}
+            keyboardType="number-pad"
+            maxLength={4}
+            secureTextEntry
+          />
 
-        <Button
-          title="Login"
-          variant="secondary"
-          size="large"
-          loading={loading}
-          onPress={handleLogin}
-          style={styles.loginButton}
-        />
-      </View>
+          <Button
+            title="Login"
+            variant="secondary"
+            size="large"
+            loading={loading}
+            onPress={handleLogin}
+            style={styles.loginButton}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -94,8 +112,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
+  keyboardView: {
     flex: 1,
+  },
+  content: {
+    flexGrow: 1,
     padding: spacing.xl,
     justifyContent: 'center',
   },

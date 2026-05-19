@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from datetime import datetime, timezone
+from typing import Optional
 
 from models.member import Member, MemberCreate, MemberAccess
 
@@ -33,6 +34,8 @@ class AccessResponse(BaseModel):
     member_name: str
     role: str
     message: str
+    owner_pin: Optional[str] = None
+    access_pin: Optional[str] = None
 
 
 @router.post("/access-qr", response_model=AccessResponse)
@@ -142,5 +145,7 @@ async def owner_login(request: OwnerLoginRequest):
         event_type=event['event_type'],
         member_name=event['owner_name'],
         role="owner",
-        message=f"Welcome back, {event['owner_name']}!"
+        message=f"Welcome back, {event['owner_name']}!",
+        owner_pin=event['owner_pin'],
+        access_pin=event['access_pin']
     )

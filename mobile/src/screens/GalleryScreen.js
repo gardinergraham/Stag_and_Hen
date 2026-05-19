@@ -1,252 +1,722 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// src/screens/GalleryScreen.js
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
+  TouchableOpacity,
   FlatList,
   Image,
-  TouchableOpacity,
-  RefreshControl,
   Alert,
   Dimensions,
+  RefreshControl,
+  Modal,
+  ScrollView,
 } from 'react-native';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { colors, typography, spacing } from '../theme';
-import { Button } from '../components';
-import { mediaApi } from '../services/api';
+import { Video, ResizeMode } from 'expo-av';
+import ViewShot from 'react-native-view-shot';
+
+import {
+  Sepia,
+  Grayscale,
+  Polaroid,
+  Vintage,
+  Kodachrome,
+} from 'react-native-color-matrix-image-filters';
+
+import api from '../services/api';
 import { useApp } from '../context/AppContext';
 
 const { width } = Dimensions.get('window');
-const imageSize = (width - spacing.lg * 2 - spacing.sm * 2) / 3;
 
-const GalleryScreen = () => {
+const colourFilters = [
+  { name: 'original', component: null },
+  { name: 'sepia', component: Sepia },
+  { name: 'bw', component: Grayscale },
+  { name: 'polaroid', component: Polaroid },
+  { name: 'vintage', component: Vintage },
+  { name: 'kodachrome', component: Kodachrome },
+];
+
+export default function GalleryScreen(props) {
+  const insets = useSafeAreaInsets();
   const { session, isOwner } = useApp();
+
+  const resolvedEventId =
+    props.eventId ?? props.route?.params?.eventId ?? session?.event_id ?? undefined;
+
+  const onBack = props.onBack;
+  const headerTitle = props.headerTitle ?? 'Gallery';
+
   const [media, setMedia] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const loadMedia = async () => {
+  const [fullScreenVisible, setFullScreenVisible] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [filtersVisible, setFiltersVisible] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState('original');
+
+  // placeholder for later paid access logic
+  const [hasPaidAccess] = useState(true);
+
+  const scrollRef = useRef(null);
+  const viewShotRef = useRef(null);
+  const videoRefs = useRef([]);
+
+  const loadMedia = useCallback(async () => {
+    if (!resolvedEventId) return;
+
     try {
-      const response = await mediaApi.getByEvent(session.event_id);
-      setMedia(response.data);
+      setLoading(true);
+      const response = await api.get(`/media/event/${resolvedEventId}`);
+      setMedia(Array.isArray(response.data) ? response.data : []);
+    } catch (err) {
+      console.error('Failed to load media:', err);
+      Alert.alert('Error', 'Failed to load gallery.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [resolvedEventId]);
+
+  useEffect(() => {
+    if (!resolvedEventId) {
+      setLoading(false);
+      return;
+    }
+    loadMedia();
+  }, [resolvedEventId, loadMedia]);
+
+  useEffect(() => {
+    media.forEach((item, idx) => {
+      const ref = videoRefs.current[idx];
+      if (item.media_type === 'video' && ref) {
+        if (idx === selectedIndex && fullScreenVisible) {
+          ref.playAsync?.().catch(() => {});
+        } else {
+          ref.pauseAsync?.().catch(() => {});
+        }
+      }
+    });
+  }, [selectedIndex, fullScreenVisible, media]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadMedia();
+  };
+
+  const uploadMedia = async (asset) => {
+    if (!resolvedEventId) return;
+
+    setUploading(true);
+    try {
+      const fileName =
+        asset.fileName ||
+        asset.uri.split('/').pop() ||
+        `upload-${Date.now()}.${asset.type === 'video' ? 'mp4' : 'jpg'}`;
+
+      const mimeType =
+        asset.mimeType ||
+        (asset.type === 'video' ? 'video/mp4' : 'image/jpeg');
+
+      const formData = new FormData();
+      formData.append('file', {
+        uri: asset.uri,
+        name: fileName,
+        type: mimeType,
+      });
+
+      const uploadUrl = `${api.defaults.baseURL}/media/upload-file`;
+      console.log('Uploading to:', uploadUrl);
+      console.log('Asset:', asset);
+
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const uploadText = await uploadResponse.text();
+      console.log('Upload raw response:', uploadText);
+
+      let uploadData;
+      try {
+        uploadData = JSON.parse(uploadText);
+      } catch (e) {
+        throw new Error(`Upload returned non-JSON response: ${uploadText}`);
+      }
+
+      if (!uploadResponse.ok) {
+        throw new Error(uploadData.detail || 'Upload failed');
+      }
+
+      await api.post('/media/', {
+        event_id: resolvedEventId,
+        uploaded_by: session?.member_name,
+        file_url: uploadData.file_url,
+        media_type: asset.type === 'video' ? 'video' : 'image',
+        caption: '',
+        thumbnail_url: null,
+      });
+
+      await loadMedia();
+      Alert.alert('Success', 'Media uploaded!');
     } catch (error) {
-      console.error('Failed to load media:', error);
+      console.error('Upload error full:', error);
+      Alert.alert('Upload Failed', error.message || 'Could not upload media.');
+    } finally {
+      setUploading(false);
     }
   };
 
-  useEffect(() => {
-    loadMedia();
-  }, []);
+  const pickMedia = async () => {
+  try {
+    console.log('pickMedia pressed');
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadMedia();
-    setRefreshing(false);
-  }, []);
-
-  const handleUpload = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'videos'],
+      allowsEditing: false,
+      quality: 0.8,
+    });
+
+    console.log('picker result:', result);
+
+    if (!result.canceled && result.assets && result.assets[0]) {
+      await uploadMedia(result.assets[0]);
+    }
+  } catch (error) {
+    console.error('Image picker error:', error);
+    Alert.alert('Error', 'Could not open your photo library.');
+  }
+};
+
+  const takeMedia = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Camera permission is required.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsEditing: false,
       quality: 0.8,
     });
 
     if (!result.canceled && result.assets[0]) {
-      setUploading(true);
-      try {
-        // In a real app, you would upload to cloud storage first
-        // For now, we'll use the local URI as a placeholder
-        const asset = result.assets[0];
-        await mediaApi.upload({
-          event_id: session.event_id,
-          uploaded_by: session.member_name,
-          file_url: asset.uri,
-          media_type: asset.type === 'video' ? 'video' : 'image',
-        });
-        await loadMedia();
-        Alert.alert('Success', 'Media uploaded!');
-      } catch (error) {
-        Alert.alert('Error', 'Failed to upload media');
-      } finally {
-        setUploading(false);
-      }
+      await uploadMedia(result.assets[0]);
     }
   };
 
-  const handleDelete = (mediaItem) => {
-    const canDelete = mediaItem.uploaded_by === session.member_name || isOwner;
-    if (!canDelete) {
-      Alert.alert('Cannot Delete', 'You can only delete your own uploads.');
-      return;
+  const deleteMedia = async (mediaId) => {
+    try {
+      setUploading(true);
+      await api.delete(`/media/${mediaId}`, {
+        params: { member_name: session?.member_name },
+      });
+      setFullScreenVisible(false);
+      await loadMedia();
+      Alert.alert('Deleted', 'Media deleted successfully.');
+    } catch (error) {
+      console.error('Delete error:', error?.response?.data || error.message);
+      Alert.alert('Error', error?.response?.data?.detail || 'Failed to delete media.');
+    } finally {
+      setUploading(false);
     }
+  };
 
-    Alert.alert('Delete Media', 'Are you sure you want to delete this?', [
+  const confirmDelete = (mediaId) => {
+    Alert.alert('Delete Media', 'This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await mediaApi.delete(mediaItem.id, session.member_name);
-            await loadMedia();
-          } catch (error) {
-            Alert.alert('Error', 'Failed to delete media');
-          }
-        },
-      },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteMedia(mediaId) },
     ]);
   };
 
-  const renderItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.mediaItem}
-      onLongPress={() => handleDelete(item)}
-    >
-      <Image
-        source={{ uri: item.file_url || item.thumbnail_url }}
-        style={styles.mediaImage}
-        resizeMode="cover"
-      />
-      {item.media_type === 'video' && (
-        <View style={styles.videoOverlay}>
-          <Text style={styles.videoIcon}>▶️</Text>
-        </View>
-      )}
-      <View style={styles.mediaInfo}>
-        <Text style={styles.uploadedBy}>{item.uploaded_by}</Text>
-      </View>
-    </TouchableOpacity>
+  const saveFilteredImage = async () => {
+    try {
+      const uri = await viewShotRef.current?.capture();
+      if (!uri) return;
+
+      await uploadMedia({
+        uri,
+        type: 'image',
+        fileName: `filtered_${Date.now()}.jpg`,
+        mimeType: 'image/jpeg',
+      });
+    } catch (err) {
+      console.error('Capture failed:', err);
+      Alert.alert('Error', 'Failed to save filtered image.');
+    }
+  };
+
+ const applyFilter = (uri, filterName) => {
+  const filter = colourFilters.find((f) => f.name === filterName);
+
+  const image = (
+    <Image
+      source={{ uri }}
+      style={styles.filteredImage}
+      resizeMode="contain"
+    />
   );
 
+  if (!filter || !filter.component) {
+    return <View style={styles.filteredContainer}>{image}</View>;
+  }
+
+  const FilterComponent = filter.component;
+
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Gallery</Text>
-        <Text style={styles.subtitle}>{media.length} memories captured</Text>
-      </View>
-
-      <FlatList
-        data={media}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        numColumns={3}
-        contentContainerStyle={styles.grid}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📸</Text>
-            <Text style={styles.emptyTitle}>No memories yet!</Text>
-            <Text style={styles.emptyText}>
-              Start capturing moments from your party
-            </Text>
-          </View>
-        }
-      />
-
-      <View style={styles.uploadSection}>
-        <Button
-          title={uploading ? 'Uploading...' : 'Upload Photo/Video'}
-          variant="primary"
-          size="large"
-          onPress={handleUpload}
-          loading={uploading}
-          disabled={uploading}
-        />
-        <Text style={styles.hint}>Long press on a photo to delete</Text>
-      </View>
-    </SafeAreaView>
+    <View style={styles.filteredContainer}>
+      <FilterComponent>
+        {image}
+      </FilterComponent>
+    </View>
   );
 };
 
+  const renderMediaItem = ({ item, index }) => {
+    const isVideo = item.media_type === 'video';
+
+    return (
+      <TouchableOpacity
+        style={styles.thumbnailContainer}
+        onPress={() => {
+          if (!hasPaidAccess) {
+            Alert.alert('Locked', 'Paid access will be required here.');
+            return;
+          }
+          setSelectedIndex(index);
+          setFullScreenVisible(true);
+        }}
+      >
+        {isVideo ? (
+          <Video
+            source={{ uri: item.file_url }}
+            style={styles.thumbnailImage}
+            isMuted
+            shouldPlay={false}
+            resizeMode={ResizeMode.COVER}
+          />
+        ) : (
+          <Image
+            source={{ uri: item.thumbnail_url || item.file_url }}
+            style={styles.thumbnailImage}
+            resizeMode="cover"
+          />
+        )}
+
+        {(item.uploaded_by === session?.member_name || isOwner) && (
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={(e) => {
+              e.stopPropagation();
+              confirmDelete(item.id);
+            }}
+          >
+            <Ionicons name="trash" size={16} color="white" />
+          </TouchableOpacity>
+        )}
+
+        {isVideo && (
+          <View style={styles.videoIndicator}>
+            <Ionicons name="play" size={18} color="white" />
+          </View>
+        )}
+
+        <View style={styles.uploaderTag}>
+          <Text style={styles.uploaderText}>{item.uploaded_by}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <View style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+          <View style={[styles.header, { paddingTop: Math.max(insets.top, 10) }]}>
+            <TouchableOpacity onPress={onBack} style={styles.backBtn} disabled={!onBack}>
+              <Ionicons
+                name="arrow-back"
+                size={24}
+                color={onBack ? 'white' : 'transparent'}
+              />
+            </TouchableOpacity>
+
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {headerTitle}
+            </Text>
+
+            <View style={{ width: 40 }} />
+          </View>
+
+          {!resolvedEventId ? (
+            <View style={styles.center}>
+              <Text style={styles.errorText}>No event selected.</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={media}
+              renderItem={renderMediaItem}
+              keyExtractor={(item) => item.id}
+              numColumns={3}
+              contentContainerStyle={[
+                styles.thumbnailGrid,
+                { paddingBottom: (insets.bottom || 20) + 120 },
+              ]}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor="#e94560"
+                />
+              }
+              ListEmptyComponent={
+                !loading ? (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="images-outline" size={40} color="#666" />
+                    <Text style={styles.emptyText}>No media yet</Text>
+                    <Text style={styles.emptySub}>
+                      Tap Capture or Choose to upload your first photo or video.
+                    </Text>
+                  </View>
+                ) : null
+              }
+            />
+          )}
+
+          <Modal visible={fullScreenVisible} transparent animationType="fade">
+            <View style={{ flex: 1 }}>
+              <View style={styles.fullscreenContainer}>
+                <TouchableOpacity
+                  style={styles.fullscreenBack}
+                  onPress={() => {
+                    setSelectedFilter('original');
+                    setFiltersVisible(false);
+                    setFullScreenVisible(false);
+                  }}
+                >
+                  <Ionicons name="arrow-back" size={30} color="white" />
+                </TouchableOpacity>
+
+                {media[selectedIndex]?.media_type === 'image' && (
+                  <TouchableOpacity
+                    style={styles.filterToggle}
+                    onPress={() => setFiltersVisible(!filtersVisible)}
+                  >
+                    <Ionicons
+                      name={filtersVisible ? 'close-circle' : 'color-filter'}
+                      size={28}
+                      color="white"
+                    />
+                  </TouchableOpacity>
+                )}
+
+                <ScrollView
+                  horizontal
+                  pagingEnabled
+                  ref={scrollRef}
+                  contentOffset={{ x: selectedIndex * width, y: 0 }}
+                  showsHorizontalScrollIndicator={false}
+                  onMomentumScrollEnd={(e) => {
+                    const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+                    setSelectedIndex(newIndex);
+                    setSelectedFilter('original');
+                  }}
+                >
+                  {media.map((item, idx) => (
+                    <View key={item.id} style={{ width, height: '100%' }}>
+                      {item.media_type === 'video' ? (
+                        <Video
+                          ref={(ref) => {
+                            videoRefs.current[idx] = ref;
+                          }}
+                          source={{ uri: item.file_url }}
+                          style={styles.fullscreenMedia}
+                          resizeMode={ResizeMode.CONTAIN}
+                          shouldPlay={idx === selectedIndex}
+                          useNativeControls
+                        />
+                      ) : idx === selectedIndex ? (
+                        <ViewShot ref={viewShotRef} options={{ format: 'jpg', quality: 0.9 }}>
+                          {applyFilter(item.file_url, selectedFilter)}
+                        </ViewShot>
+                      ) : (
+                        applyFilter(item.file_url, selectedFilter)
+                      )}
+                    </View>
+                  ))}
+                </ScrollView>
+
+                {filtersVisible && media[selectedIndex]?.media_type === 'image' && (
+                  <View style={[styles.filterBar, { bottom: insets.bottom + 20 }]}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      {colourFilters.map((filter) => {
+                        const FilterComponent = filter.component;
+                        const previewUri = media[selectedIndex]?.file_url;
+
+                        return (
+                          <TouchableOpacity
+                            key={filter.name}
+                            onPress={() => setSelectedFilter(filter.name)}
+                            style={styles.filterItem}
+                          >
+                            <View style={styles.filterPreview}>
+                              {typeof FilterComponent === 'function' ? (
+                                <FilterComponent>
+                                  {previewUri && (
+                                    <Image
+                                      source={{ uri: previewUri }}
+                                      style={styles.previewImage}
+                                    />
+                                  )}
+                                </FilterComponent>
+                              ) : (
+                                previewUri && (
+                                  <Image
+                                    source={{ uri: previewUri }}
+                                    style={styles.previewImage}
+                                  />
+                                )
+                              )}
+                            </View>
+                            <Text style={styles.filterLabel}>{filter.name}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+
+                    <TouchableOpacity style={styles.saveButton} onPress={saveFilteredImage}>
+                      <Ionicons name="download" size={26} color="white" />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            </View>
+          </Modal>
+
+          <View style={[styles.bottomActionsContainer, { paddingBottom: insets.bottom + 12 }]}>
+            <View style={styles.topActionRow}>
+              <TouchableOpacity
+                style={[styles.actionButton, uploading && styles.actionButtonDisabled]}
+                disabled={uploading}
+                onPress={takeMedia}
+              >
+                <Ionicons name="camera" size={22} color="white" />
+                <Text style={styles.actionButtonText}>
+                  {uploading ? 'Uploading...' : 'Capture'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, uploading && styles.actionButtonDisabled]}
+                disabled={uploading}
+                onPress={pickMedia}
+              >
+                <Ionicons name="image" size={22} color="white" />
+                <Text style={styles.actionButtonText}>
+                  {uploading ? 'Uploading...' : 'Choose'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </SafeAreaView>
+      </SafeAreaProvider>
+      </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
+  safe: { flex: 1, backgroundColor: '#0f0f23' },
   header: {
-    padding: spacing.lg,
-    paddingBottom: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+    borderBottomColor: '#222',
+    borderBottomWidth: 1,
+    backgroundColor: '#0f0f23',
   },
-  title: {
-    ...typography.h1,
-    color: colors.text,
+  backBtn: { padding: 8, width: 40, alignItems: 'flex-start' },
+  headerTitle: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold',
+    flex: 1,
+    textAlign: 'center',
   },
-  subtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  errorText: { color: '#ff6b6b', fontSize: 16 },
+  thumbnailGrid: { paddingHorizontal: 8, paddingVertical: 12 },
+  thumbnailContainer: {
+    flex: 1,
+    margin: 4,
+    aspectRatio: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#1a1a2e',
+    position: 'relative',
   },
-  grid: {
-    padding: spacing.lg,
-    paddingTop: 0,
+  thumbnailImage: { width: '100%', height: '100%' },
+  deleteButton: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    backgroundColor: 'rgba(233, 69, 96, 0.9)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  mediaItem: {
-    width: imageSize,
-    height: imageSize,
-    margin: spacing.xs,
+  videoIndicator: {
+    position: 'absolute',
+    bottom: 5,
+    right: 5,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploaderTag: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  uploaderText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e94560',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 25,
+    minWidth: 130,
+    justifyContent: 'center',
+  },
+  actionButtonDisabled: {
+    backgroundColor: '#333',
+    opacity: 0.8,
+  },
+  actionButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyText: {
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 8,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  emptySub: {
+    color: '#888',
+    marginTop: 4,
+    fontSize: 13,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+  },
+  fullscreenMedia: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'black',
+  },
+  fullscreenContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filterBar: {
+    position: 'absolute',
+    width: '100%',
+    paddingVertical: 10,
+  },
+  filterItem: {
+    alignItems: 'center',
+    marginHorizontal: 10,
+  },
+  filterPreview: {
+    width: 60,
+    height: 60,
     borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: colors.surface,
   },
-  mediaImage: {
+  previewImage: {
     width: '100%',
     height: '100%',
   },
-  videoOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  filterLabel: {
+    color: 'white',
+    fontSize: 12,
+    marginTop: 4,
   },
-  videoIcon: {
-    fontSize: 24,
-  },
-  mediaInfo: {
+  saveButton: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    padding: 4,
+    right: 20,
+    bottom: 80,
+    backgroundColor: '#e94560',
+    padding: 14,
+    borderRadius: 30,
+    elevation: 4,
   },
-  uploadedBy: {
-    ...typography.caption,
-    color: colors.text,
-    textAlign: 'center',
+  filterToggle: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    padding: 10,
+    borderRadius: 25,
   },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: spacing.xxl * 2,
+  fullscreenBack: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 20,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    padding: 10,
+    borderRadius: 25,
   },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: spacing.md,
-  },
-  emptyTitle: {
-    ...typography.h2,
-    color: colors.text,
-    marginBottom: spacing.sm,
-  },
-  emptyText: {
-    ...typography.body,
-    color: colors.textSecondary,
-    textAlign: 'center',
-  },
-  uploadSection: {
-    padding: spacing.lg,
+  bottomActionsContainer: {
+    backgroundColor: '#0f0f23',
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: '#222',
+    paddingHorizontal: 16,
+    paddingTop: 12,
   },
-  hint: {
-    ...typography.caption,
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginTop: spacing.sm,
+  topActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 10,
   },
+  filteredContainer: {
+  width: width,
+  height: '100%',
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: 'black',
+},
+filteredImage: {
+  width: width,
+  height: '100%',
+},
 });
-
-export default GalleryScreen;

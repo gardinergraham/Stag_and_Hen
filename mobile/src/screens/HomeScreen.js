@@ -147,6 +147,15 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.actionLabel}>Share QR</Text>
             </TouchableOpacity>
           )}
+          {isOwner && (
+            <TouchableOpacity
+              style={[styles.actionCard, { backgroundColor: `${colors.primary}20` }]}
+              onPress={() => navigation.navigate('AdminSettings')}
+            >
+              <Text style={styles.actionIcon}>⚙️</Text>
+              <Text style={styles.actionLabel}>Admin</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Crew Members */}

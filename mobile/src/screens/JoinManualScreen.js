@@ -5,6 +5,10 @@ import {
   StyleSheet,
   SafeAreaView,
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from 'react-native';
 import { colors, typography, spacing } from '../theme';
 import { Button, TextInput } from '../components';
@@ -19,6 +23,13 @@ const JoinManualScreen = ({ navigation }) => {
     name: '',
     pin: '',
   });
+
+  const handlePinChange = (pin) => {
+    setForm({ ...form, pin });
+    if (pin.length >= 4) {
+      Keyboard.dismiss();
+    }
+  };
 
   const handleJoin = async () => {
     if (!form.event_name || !form.name || !form.pin) {
@@ -53,46 +64,51 @@ const JoinManualScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Join Event</Text>
-        <Text style={styles.subtitle}>
-          Enter the event details shared with you
-        </Text>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <Text style={styles.title}>Join Event</Text>
+          <Text style={styles.subtitle}>
+            Enter the event details shared with you
+          </Text>
 
-        <TextInput
-          label="Event Name"
-          placeholder="e.g., Jamie's Stag Weekend"
-          value={form.event_name}
-          onChangeText={(text) => setForm({ ...form, event_name: text })}
-          autoCapitalize="words"
-        />
+          <TextInput
+            label="Event Name"
+            placeholder="e.g., Jamie's Stag Weekend"
+            value={form.event_name}
+            onChangeText={(text) => setForm({ ...form, event_name: text })}
+            autoCapitalize="words"
+          />
 
-        <TextInput
-          label="Your Name"
-          placeholder="What should we call you?"
-          value={form.name}
-          onChangeText={(text) => setForm({ ...form, name: text })}
-          autoCapitalize="words"
-        />
+          <TextInput
+            label="Your Name"
+            placeholder="What should we call you?"
+            value={form.name}
+            onChangeText={(text) => setForm({ ...form, name: text })}
+            autoCapitalize="words"
+          />
 
-        <TextInput
-          label="Access PIN"
-          placeholder="4-digit PIN"
-          value={form.pin}
-          onChangeText={(text) => setForm({ ...form, pin: text })}
-          keyboardType="number-pad"
-          maxLength={4}
-        />
+          <TextInput
+            label="Access PIN"
+            placeholder="4-digit PIN"
+            value={form.pin}
+            onChangeText={handlePinChange}
+            keyboardType="number-pad"
+            maxLength={4}
+          />
 
-        <Button
-          title="Join the Party!"
-          variant="primary"
-          size="large"
-          loading={loading}
-          onPress={handleJoin}
-          style={styles.joinButton}
-        />
-      </View>
+          <Button
+            title="Join the Party!"
+            variant="primary"
+            size="large"
+            loading={loading}
+            onPress={handleJoin}
+            style={styles.joinButton}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -102,8 +118,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
+  keyboardView: {
     flex: 1,
+  },
+  content: {
+    flexGrow: 1,
     padding: spacing.xl,
     justifyContent: 'center',
   },

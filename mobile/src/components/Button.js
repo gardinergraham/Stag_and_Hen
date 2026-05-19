@@ -12,45 +12,61 @@ const Button = ({
   icon,
   style,
   textStyle,
+  color,
 }) => {
   const getButtonStyle = () => {
     const base = [styles.button, styles[size]];
-    
+
     switch (variant) {
       case 'primary':
-        base.push(styles.primary);
+        base.push({
+          backgroundColor: color || colors.primary,
+          ...shadows.glow(color || colors.primary),
+        });
         break;
+
       case 'secondary':
-        base.push(styles.secondary);
+        base.push({
+          backgroundColor: color || colors.secondary,
+          ...shadows.glow(color || colors.secondary),
+        });
         break;
+
       case 'gold':
         base.push(styles.gold);
         break;
+
       case 'outline':
-        base.push(styles.outline);
+        base.push({
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          borderColor: color || colors.secondary,
+        });
         break;
     }
-    
+
     if (disabled) {
       base.push(styles.disabled);
     }
-    
+
     return base;
   };
 
   const getTextStyle = () => {
     const base = [styles.text, styles[`${size}Text`]];
-    
+
     if (variant === 'gold') {
       base.push(styles.goldText);
     } else if (variant === 'outline') {
-      base.push(styles.outlineText);
+      base.push({
+        color: color || colors.secondary,
+      });
     }
-    
+
     if (disabled) {
       base.push(styles.disabledText);
     }
-    
+
     return base;
   };
 

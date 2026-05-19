@@ -15,8 +15,24 @@ db = client[os.environ['DB_NAME']]
 
 
 @router.post("/items", response_model=ShopItem)
-async def create_shop_item(item_input: ShopItemCreate):
+async def create_shop_item(
+    item_input: ShopItemCreate,
+    event_id: Optional[str] = None,
+    owner_pin: Optional[str] = None,
+    admin_username: Optional[str] = None,
+    admin_password: Optional[str] = None,
+):
     """Create a new shop item (admin only - for seeding)"""
+    has_global_admin = admin_username == "GrahamAdmin" and admin_password == "1234"
+    has_event_owner = False
+
+    if event_id and owner_pin:
+        event = await db.events.find_one({"id": event_id, "owner_pin": owner_pin, "is_active": True})
+        has_event_owner = event is not None
+
+    if not has_global_admin and not has_event_owner:
+        raise HTTPException(status_code=403, detail="Only admins or event owners can add shop items")
+
     item = ShopItem(
         name=item_input.name,
         description=item_input.description,

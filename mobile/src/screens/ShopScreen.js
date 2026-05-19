@@ -44,9 +44,9 @@ const ShopScreen = () => {
   const handleItemPress = async (item) => {
     try {
       // Track the click
-      await shopApi.trackClick(item.id, session.member_name, session.event_id);
+      const response = await shopApi.trackClick(item.id, session?.member_name, session?.event_id);
       // Open affiliate link
-      Linking.openURL(item.affiliate_url);
+      Linking.openURL(response.data?.affiliate_url || item.affiliate_url);
     } catch (error) {
       // Still open the link even if tracking fails
       Linking.openURL(item.affiliate_url);

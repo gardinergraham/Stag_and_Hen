@@ -1,15 +1,17 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Image, Animated } from 'react-native';
 import { colors, typography } from '../theme';
 import { useApp } from '../context/AppContext';
 
 const SplashScreen = ({ navigation }) => {
   const { loading, isLoggedIn } = useApp();
-  const fadeAnim = new Animated.Value(0);
-  const scaleAnim = new Animated.Value(0.8);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
-    // Animate logo
+    console.log('SplashScreen mounted');
+    console.log('loading:', loading, 'isLoggedIn:', isLoggedIn);
+
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -23,19 +25,24 @@ const SplashScreen = ({ navigation }) => {
         useNativeDriver: true,
       }),
     ]).start();
+  }, []);
 
-    // Navigate after loading
+  useEffect(() => {
+    console.log('Splash state changed:', { loading, isLoggedIn });
+
     if (!loading) {
       const timer = setTimeout(() => {
+        console.log('Navigating now...');
         if (isLoggedIn) {
           navigation.replace('Main');
         } else {
           navigation.replace('Welcome');
         }
       }, 2000);
+
       return () => clearTimeout(timer);
     }
-  }, [loading, isLoggedIn]);
+  }, [loading, isLoggedIn, navigation]);
 
   return (
     <View style={styles.container}>
@@ -49,7 +56,7 @@ const SplashScreen = ({ navigation }) => {
         ]}
       >
         <Image
-          source={require('../../assets/logo.jpg')}
+          source={require('../../assets/splash-icon.jpg')}
           style={styles.logo}
           resizeMode="contain"
         />

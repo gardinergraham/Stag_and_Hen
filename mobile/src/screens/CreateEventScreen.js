@@ -24,6 +24,8 @@ const CreateEventScreen = ({ navigation }) => {
     description: '',
     media_delete_policy: 'never',
   });
+  const STAG_BLUE = '#2563EB';
+  const HEN_PINK = colors.primary; 
 
   const eventTypes = [
     { id: 'stag', label: 'Stag Do', emoji: '🦌' },
@@ -78,12 +80,19 @@ const CreateEventScreen = ({ navigation }) => {
         <Text style={styles.subtitle}>Let's plan an unforgettable party!</Text>
 
         <View style={styles.typeSelector}>
-          {eventTypes.map((type) => (
+        {eventTypes.map((type) => {
+          const isActive = form.event_type === type.id;
+          const activeColor = type.id === 'stag' ? STAG_BLUE : HEN_PINK;
+
+          return (
             <TouchableOpacity
               key={type.id}
               style={[
                 styles.typeOption,
-                form.event_type === type.id && styles.typeOptionActive,
+                isActive && {
+                  borderColor: activeColor,
+                  backgroundColor: `${activeColor}20`,
+                },
               ]}
               onPress={() => setForm({ ...form, event_type: type.id })}
             >
@@ -91,13 +100,14 @@ const CreateEventScreen = ({ navigation }) => {
               <Text
                 style={[
                   styles.typeLabel,
-                  form.event_type === type.id && styles.typeLabelActive,
+                  isActive && { color: activeColor },
                 ]}
               >
                 {type.label}
               </Text>
             </TouchableOpacity>
-          ))}
+          );
+        })}
         </View>
 
         <TextInput
@@ -153,9 +163,10 @@ const CreateEventScreen = ({ navigation }) => {
           ))}
         </View>
 
-        <Button
+       <Button
           title="Create Event"
-          variant="gold"
+          variant="primary"
+          color={form.event_type === 'stag' ? STAG_BLUE : HEN_PINK}
           size="large"
           loading={loading}
           onPress={handleCreate}

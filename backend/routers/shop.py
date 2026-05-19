@@ -14,6 +14,23 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 
+async def verify_shop_admin(
+    event_id: Optional[str] = None,
+    owner_pin: Optional[str] = None,
+    admin_username: Optional[str] = None,
+    admin_password: Optional[str] = None,
+) -> None:
+    has_global_admin = admin_username == "GrahamAdmin" and admin_password == "1234"
+    has_event_owner = False
+
+    if event_id and owner_pin:
+        event = await db.events.find_one({"id": event_id, "owner_pin": owner_pin, "is_active": True})
+        has_event_owner = event is not None
+
+    if not has_global_admin and not has_event_owner:
+        raise HTTPException(status_code=403, detail="Only admins or event owners can manage shop items")
+
+
 @router.post("/items", response_model=ShopItem)
 async def create_shop_item(
     item_input: ShopItemCreate,
@@ -23,15 +40,7 @@ async def create_shop_item(
     admin_password: Optional[str] = None,
 ):
     """Create a new shop item (admin only - for seeding)"""
-    has_global_admin = admin_username == "GrahamAdmin" and admin_password == "1234"
-    has_event_owner = False
-
-    if event_id and owner_pin:
-        event = await db.events.find_one({"id": event_id, "owner_pin": owner_pin, "is_active": True})
-        has_event_owner = event is not None
-
-    if not has_global_admin and not has_event_owner:
-        raise HTTPException(status_code=403, detail="Only admins or event owners can add shop items")
+    await verify_shop_admin(event_id, owner_pin, admin_username, admin_password)
 
     item = ShopItem(
         name=item_input.name,
@@ -48,6 +57,50 @@ async def create_shop_item(
     await db.shop_items.insert_one(item_doc)
     
     return item
+
+
+@router.put("/items/{item_id}", response_model=ShopItem)
+async def update_shop_item(
+    item_id: str,
+    item_input: ShopItemCreate,
+    event_id: Optional[str] = None,
+    owner_pin: Optional[str] = None,
+    admin_username: Optional[str] = None,
+    admin_password: Optional[str] = None,
+):
+    """Update an existing shop item"""
+    await verify_shop_admin(event_id, owner_pin, admin_username, admin_password)
+
+    existing_item = await db.shop_items.find_one({"id": item_id, "is_active": True})
+    if not existing_item:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    update_data = item_input.model_dump()
+    await db.shop_items.update_one({"id": item_id}, {"$set": update_data})
+
+    updated_item = await db.shop_items.find_one({"id": item_id}, {"_id": 0})
+    if isinstance(updated_item['created_at'], str):
+        updated_item['created_at'] = datetime.fromisoformat(updated_item['created_at'])
+
+    return updated_item
+
+
+@router.delete("/items/{item_id}")
+async def delete_shop_item(
+    item_id: str,
+    event_id: Optional[str] = None,
+    owner_pin: Optional[str] = None,
+    admin_username: Optional[str] = None,
+    admin_password: Optional[str] = None,
+):
+    """Soft delete an existing shop item"""
+    await verify_shop_admin(event_id, owner_pin, admin_username, admin_password)
+
+    result = await db.shop_items.update_one({"id": item_id, "is_active": True}, {"$set": {"is_active": False}})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    return {"message": "Item deleted successfully"}
 
 
 @router.get("/items", response_model=List[ShopItem])

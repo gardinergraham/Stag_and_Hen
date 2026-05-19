@@ -1,12 +1,20 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
-import { Camera, Users, ShoppingBag, Wallet, QrCode, Shield, PartyPopper, Heart, Check, Smartphone, Apple, Plus, RefreshCw, Lock, ExternalLink } from "lucide-react";
+import { Camera, Users, ShoppingBag, Wallet, QrCode, Shield, PartyPopper, Heart, Check, Smartphone, Apple, Plus, RefreshCw, Lock, ExternalLink, Save, Trash2, X } from "lucide-react";
 import "@/App.css";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "https://stagandhen-production.up.railway.app";
 const API_BASE_URL = `${BACKEND_URL}/api`;
 const ADMIN_USERNAME = "GrahamAdmin";
 const ADMIN_PASSWORD = "1234";
+const emptyShopForm = {
+  name: "",
+  description: "",
+  price: "",
+  affiliate_url: "",
+  image_url: "",
+  category: "other",
+};
 
 // Header Component
 const Header = () => (
@@ -266,14 +274,8 @@ const Footer = () => (
 const AdminPage = () => {
   const [credentials, setCredentials] = useState({ username: "", password: "" });
   const [isAuthed, setIsAuthed] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    description: "",
-    price: "",
-    affiliate_url: "",
-    image_url: "",
-    category: "other",
-  });
+  const [form, setForm] = useState(emptyShopForm);
+  const [selectedItem, setSelectedItem] = useState(null);
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
   const [status, setStatus] = useState("");
@@ -281,7 +283,7 @@ const AdminPage = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const loadShopData = async () => {
+  const loadShopData = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -296,16 +298,42 @@ const AdminPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (isAuthed) {
       loadShopData();
     }
-  }, [isAuthed]);
+  }, [isAuthed, loadShopData]);
 
   const updateForm = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const getAdminParams = () => ({
+    admin_username: ADMIN_USERNAME,
+    admin_password: ADMIN_PASSWORD,
+  });
+
+  const resetForm = () => {
+    setSelectedItem(null);
+    setForm(emptyShopForm);
+    setError("");
+    setStatus("");
+  };
+
+  const selectItem = (item) => {
+    setSelectedItem(item);
+    setForm({
+      name: item.name || "",
+      description: item.description || "",
+      price: String(item.price ?? ""),
+      affiliate_url: item.affiliate_url || "",
+      image_url: item.image_url || "",
+      category: item.category || "other",
+    });
+    setError("");
+    setStatus("");
   };
 
   const handleLogin = (event) => {
@@ -338,36 +366,58 @@ const AdminPage = () => {
 
     setSaving(true);
     try {
-      await axios.post(
-        `${API_BASE_URL}/shop/items`,
-        {
-          name: form.name.trim(),
-          description: form.description.trim() || null,
-          price,
-          affiliate_url: form.affiliate_url.trim(),
-          image_url: form.image_url.trim(),
-          category: form.category,
-        },
-        {
-          params: {
-            admin_username: ADMIN_USERNAME,
-            admin_password: ADMIN_PASSWORD,
-          },
-        }
-      );
+      const payload = {
+        name: form.name.trim(),
+        description: form.description.trim() || null,
+        price,
+        affiliate_url: form.affiliate_url.trim(),
+        image_url: form.image_url.trim(),
+        category: form.category,
+      };
 
-      setForm({
-        name: "",
-        description: "",
-        price: "",
-        affiliate_url: "",
-        image_url: "",
-        category: "other",
-      });
-      setStatus("Product added to the party shop.");
+      if (selectedItem) {
+        await axios.put(`${API_BASE_URL}/shop/items/${selectedItem.id}`, payload, {
+          params: getAdminParams(),
+        });
+        setStatus("Product updated.");
+      } else {
+        await axios.post(`${API_BASE_URL}/shop/items`, payload, {
+          params: getAdminParams(),
+        });
+        setStatus("Product added to the party shop.");
+      }
+
+      setSelectedItem(null);
+      setForm(emptyShopForm);
       await loadShopData();
     } catch (err) {
-      setError(err.response?.data?.detail || "Could not add this product.");
+      setError(err.response?.data?.detail || "Could not save this product.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (item) => {
+    const confirmed = window.confirm(`Delete "${item.name}" from the party shop?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      await axios.delete(`${API_BASE_URL}/shop/items/${item.id}`, {
+        params: getAdminParams(),
+      });
+      if (selectedItem?.id === item.id) {
+        setSelectedItem(null);
+        setForm(emptyShopForm);
+      }
+      setStatus("Product deleted.");
+      await loadShopData();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Could not delete this product.");
     } finally {
       setSaving(false);
     }
@@ -432,10 +482,10 @@ const AdminPage = () => {
       <section className="admin-layout">
         <form className="admin-card admin-form" onSubmit={handleSubmit}>
           <div className="admin-card-header">
-            <Plus size={20} />
+            {selectedItem ? <Save size={20} /> : <Plus size={20} />}
             <div>
-              <p>New Product</p>
-              <h1>Add Shop Item</h1>
+              <p>{selectedItem ? "Editing Product" : "New Product"}</p>
+              <h1>{selectedItem ? "Update Shop Item" : "Add Shop Item"}</h1>
             </div>
           </div>
 
@@ -499,10 +549,18 @@ const AdminPage = () => {
           {error && <div className="admin-alert admin-alert-error">{error}</div>}
           {status && <div className="admin-alert admin-alert-success">{status}</div>}
 
-          <button className="btn btn-primary admin-submit" type="submit" disabled={saving}>
-            <Plus size={18} />
-            {saving ? "Adding Product" : "Add Product"}
-          </button>
+          <div className="admin-form-actions">
+            <button className="btn btn-primary admin-submit" type="submit" disabled={saving}>
+              {selectedItem ? <Save size={18} /> : <Plus size={18} />}
+              {saving ? "Saving" : selectedItem ? "Update Product" : "Add Product"}
+            </button>
+            {selectedItem && (
+              <button className="btn btn-secondary admin-submit" type="button" onClick={resetForm}>
+                <X size={18} />
+                Cancel Edit
+              </button>
+            )}
+          </div>
         </form>
 
         <aside className="admin-card admin-preview">
@@ -515,15 +573,25 @@ const AdminPage = () => {
           </div>
           <div className="admin-product-list">
             {items.map((item) => (
-              <article className="admin-product-row" key={item.id}>
-                <img src={item.image_url} alt="" />
-                <div>
-                  <h3>{item.name}</h3>
-                  <p>£{Number(item.price).toFixed(2)} · {item.category}</p>
+              <article
+                className={`admin-product-row ${selectedItem?.id === item.id ? "admin-product-row-selected" : ""}`}
+                key={item.id}
+              >
+                <button className="admin-product-main" type="button" onClick={() => selectItem(item)}>
+                  <img src={item.image_url} alt="" />
+                  <div>
+                    <h3>{item.name}</h3>
+                    <p>£{Number(item.price).toFixed(2)} · {item.category}</p>
+                  </div>
+                </button>
+                <div className="admin-product-actions">
+                  <a href={item.affiliate_url} target="_blank" rel="noreferrer" aria-label={`Open ${item.name}`}>
+                    <ExternalLink size={16} />
+                  </a>
+                  <button type="button" onClick={() => handleDelete(item)} aria-label={`Delete ${item.name}`}>
+                    <Trash2 size={16} />
+                  </button>
                 </div>
-                <a href={item.affiliate_url} target="_blank" rel="noreferrer" aria-label={`Open ${item.name}`}>
-                  <ExternalLink size={16} />
-                </a>
               </article>
             ))}
           </div>

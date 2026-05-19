@@ -1,7 +1,12 @@
-import { Camera, Users, ShoppingBag, Wallet, QrCode, Shield, PartyPopper, Heart, Check, Smartphone, Apple } from "lucide-react";
+import { useEffect, useState } from "react";
+import axios from "axios";
+import { Camera, Users, ShoppingBag, Wallet, QrCode, Shield, PartyPopper, Heart, Check, Smartphone, Apple, Plus, RefreshCw, Lock, ExternalLink } from "lucide-react";
 import "@/App.css";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "https://stagandhen-production.up.railway.app";
+const API_BASE_URL = `${BACKEND_URL}/api`;
+const ADMIN_USERNAME = "GrahamAdmin";
+const ADMIN_PASSWORD = "1234";
 
 // Header Component
 const Header = () => (
@@ -258,8 +263,282 @@ const Footer = () => (
   </footer>
 );
 
+const AdminPage = () => {
+  const [credentials, setCredentials] = useState({ username: "", password: "" });
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    price: "",
+    affiliate_url: "",
+    image_url: "",
+    category: "other",
+  });
+  const [categories, setCategories] = useState([]);
+  const [items, setItems] = useState([]);
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const loadShopData = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [itemsRes, categoriesRes] = await Promise.all([
+        axios.get(`${API_BASE_URL}/shop/items`),
+        axios.get(`${API_BASE_URL}/shop/categories`),
+      ]);
+      setItems(itemsRes.data);
+      setCategories(categoriesRes.data.categories);
+    } catch (err) {
+      setError(err.response?.data?.detail || "Could not load shop data.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthed) {
+      loadShopData();
+    }
+  }, [isAuthed]);
+
+  const updateForm = (key, value) => {
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const handleLogin = (event) => {
+    event.preventDefault();
+    setError("");
+
+    if (credentials.username.trim() !== ADMIN_USERNAME || credentials.password !== ADMIN_PASSWORD) {
+      setError("Admin username or password is incorrect.");
+      return;
+    }
+
+    setIsAuthed(true);
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const price = Number.parseFloat(form.price);
+    setError("");
+    setStatus("");
+
+    if (!form.name.trim() || !form.affiliate_url.trim() || !form.image_url.trim()) {
+      setError("Please add a product name, image URL, and shop link.");
+      return;
+    }
+
+    if (!Number.isFinite(price) || price <= 0) {
+      setError("Please enter a valid product price.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await axios.post(
+        `${API_BASE_URL}/shop/items`,
+        {
+          name: form.name.trim(),
+          description: form.description.trim() || null,
+          price,
+          affiliate_url: form.affiliate_url.trim(),
+          image_url: form.image_url.trim(),
+          category: form.category,
+        },
+        {
+          params: {
+            admin_username: ADMIN_USERNAME,
+            admin_password: ADMIN_PASSWORD,
+          },
+        }
+      );
+
+      setForm({
+        name: "",
+        description: "",
+        price: "",
+        affiliate_url: "",
+        image_url: "",
+        category: "other",
+      });
+      setStatus("Product added to the party shop.");
+      await loadShopData();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Could not add this product.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!isAuthed) {
+    return (
+      <main className="admin-shell">
+        <section className="admin-login-panel">
+          <div className="admin-login-brand">
+            <img src="/logo.jpg" alt="Stag & Hen" />
+            <div>
+              <p>Shop Admin</p>
+              <h1>The Stag & Hen</h1>
+            </div>
+          </div>
+          <form className="admin-card admin-login-form" onSubmit={handleLogin}>
+            <div className="admin-card-header">
+              <Lock size={20} />
+              <h2>Admin Login</h2>
+            </div>
+            <label>
+              Username
+              <input
+                value={credentials.username}
+                onChange={(event) => setCredentials({ ...credentials, username: event.target.value })}
+                placeholder="GrahamAdmin"
+                autoComplete="username"
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={credentials.password}
+                onChange={(event) => setCredentials({ ...credentials, password: event.target.value })}
+                placeholder="1234"
+                autoComplete="current-password"
+              />
+            </label>
+            {error && <div className="admin-alert admin-alert-error">{error}</div>}
+            <button className="btn btn-primary admin-submit" type="submit">Open Admin</button>
+          </form>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="admin-shell admin-workspace">
+      <header className="admin-topbar">
+        <a href="/" className="logo">
+          <img src="/logo.jpg" alt="Stag & Hen" />
+          <span className="logo-text">The Stag <span>&</span> Hen</span>
+        </a>
+        <button className="btn btn-secondary" type="button" onClick={loadShopData} disabled={loading}>
+          <RefreshCw size={18} />
+          {loading ? "Refreshing" : "Refresh"}
+        </button>
+      </header>
+
+      <section className="admin-layout">
+        <form className="admin-card admin-form" onSubmit={handleSubmit}>
+          <div className="admin-card-header">
+            <Plus size={20} />
+            <div>
+              <p>New Product</p>
+              <h1>Add Shop Item</h1>
+            </div>
+          </div>
+
+          <div className="admin-form-grid">
+            <label>
+              Product Name
+              <input
+                value={form.name}
+                onChange={(event) => updateForm("name", event.target.value)}
+                placeholder="Bride squad sash pack"
+              />
+            </label>
+            <label>
+              Price
+              <input
+                value={form.price}
+                onChange={(event) => updateForm("price", event.target.value)}
+                placeholder="12.99"
+                inputMode="decimal"
+              />
+            </label>
+          </div>
+
+          <label>
+            Shop or Affiliate Link
+            <input
+              value={form.affiliate_url}
+              onChange={(event) => updateForm("affiliate_url", event.target.value)}
+              placeholder="https://www.amazon.co.uk/dp/..."
+            />
+          </label>
+
+          <label>
+            Product Image URL
+            <input
+              value={form.image_url}
+              onChange={(event) => updateForm("image_url", event.target.value)}
+              placeholder="https://..."
+            />
+          </label>
+
+          <label>
+            Description
+            <textarea
+              value={form.description}
+              onChange={(event) => updateForm("description", event.target.value)}
+              placeholder="Short note for users in the app"
+              rows={4}
+            />
+          </label>
+
+          <label>
+            Category
+            <select value={form.category} onChange={(event) => updateForm("category", event.target.value)}>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>{category.name}</option>
+              ))}
+            </select>
+          </label>
+
+          {error && <div className="admin-alert admin-alert-error">{error}</div>}
+          {status && <div className="admin-alert admin-alert-success">{status}</div>}
+
+          <button className="btn btn-primary admin-submit" type="submit" disabled={saving}>
+            <Plus size={18} />
+            {saving ? "Adding Product" : "Add Product"}
+          </button>
+        </form>
+
+        <aside className="admin-card admin-preview">
+          <div className="admin-card-header">
+            <ShoppingBag size={20} />
+            <div>
+              <p>Live Shop</p>
+              <h2>{items.length} Products</h2>
+            </div>
+          </div>
+          <div className="admin-product-list">
+            {items.map((item) => (
+              <article className="admin-product-row" key={item.id}>
+                <img src={item.image_url} alt="" />
+                <div>
+                  <h3>{item.name}</h3>
+                  <p>£{Number(item.price).toFixed(2)} · {item.category}</p>
+                </div>
+                <a href={item.affiliate_url} target="_blank" rel="noreferrer" aria-label={`Open ${item.name}`}>
+                  <ExternalLink size={16} />
+                </a>
+              </article>
+            ))}
+          </div>
+        </aside>
+      </section>
+    </main>
+  );
+};
+
 // Main App Component
 function App() {
+  if (window.location.pathname === "/admin") {
+    return <AdminPage />;
+  }
+
   return (
     <div className="App">
       <Header />

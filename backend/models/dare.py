@@ -81,3 +81,31 @@ class SpinResult(BaseModel):
     spun_by: Optional[str] = None
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class SecretMissionAssign(BaseModel):
+    event_id: str = Field(..., min_length=1)
+    member_name: str = Field(..., min_length=1, max_length=80)
+
+
+class SecretMission(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    event_id: str
+    member_name: str
+    mission_text: str
+    is_completed: bool = Field(default=False)
+    completed_at: Optional[datetime] = None
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class SecretMissionCompletion(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    event_id: str
+    member_name: str
+    is_completed: bool
+    completed_at: Optional[datetime] = None

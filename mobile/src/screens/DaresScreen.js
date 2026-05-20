@@ -14,11 +14,12 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import Svg, { Path } from 'react-native-svg';
 import { colors, typography, spacing, getEventTheme } from '../theme';
 import { Button, Card, TextInput } from '../components';
 import { useApp } from '../context/AppContext';
-import { daresApi, eventsApi } from '../services/api';
+import api, { daresApi, eventsApi } from '../services/api';
 
 const dareDecks = {
   warmup: [
@@ -52,6 +53,59 @@ const categories = [
   { id: 'photo', title: 'Photo Dare', icon: 'camera' },
   { id: 'cheeky', title: 'Cheeky', icon: 'happy' },
   { id: 'drinks', title: 'Drinks', icon: 'beer' },
+];
+
+const gameModes = [
+  {
+    id: 'spinner',
+    title: 'Spinner',
+    subtitle: 'Pick a person and a forfeit',
+    icon: 'navigate',
+    category: null,
+  },
+  {
+    id: 'dares',
+    title: 'Dares',
+    subtitle: 'Quick cards for the crew',
+    icon: 'sparkles',
+    category: 'warmup',
+  },
+  {
+    id: 'photo',
+    title: 'Photo Challenges',
+    subtitle: 'Create gallery moments',
+    icon: 'camera',
+    category: 'photo',
+  },
+  {
+    id: 'drinks',
+    title: 'Drinking Games',
+    subtitle: 'Optional rounds and rules',
+    icon: 'beer',
+    category: 'drinks',
+  },
+  {
+    id: 'missions',
+    title: 'Secret Missions',
+    subtitle: 'Private tasks for each guest',
+    icon: 'eye',
+    category: null,
+  },
+  {
+    id: 'messages',
+    title: 'Video Messages',
+    subtitle: 'Advice and memories to keep',
+    icon: 'videocam',
+    category: null,
+  },
+];
+
+const messagePrompts = [
+  'Best memory',
+  'Advice',
+  'Future wishes',
+  'Toast',
+  'Prediction',
 ];
 
 const spinnerPairs = [
@@ -100,6 +154,7 @@ const spinnerPairs = [
 const DaresScreen = ({ navigation }) => {
   const { session, isOwner } = useApp();
   const theme = getEventTheme(session?.event_type);
+  const [selectedGameMode, setSelectedGameMode] = useState('spinner');
   const [selectedCategory, setSelectedCategory] = useState('warmup');
   const [customDares, setCustomDares] = useState([]);
   const [customSpinnerPairs, setCustomSpinnerPairs] = useState([]);
@@ -120,6 +175,13 @@ const DaresScreen = ({ navigation }) => {
   const [selectedPairId, setSelectedPairId] = useState('drink-safe');
   const [spinnerResult, setSpinnerResult] = useState(null);
   const [recentSpinResults, setRecentSpinResults] = useState([]);
+  const [spinResultsVisible, setSpinResultsVisible] = useState(false);
+  const [secretMission, setSecretMission] = useState(null);
+  const [missionCompletions, setMissionCompletions] = useState([]);
+  const [loadingMission, setLoadingMission] = useState(false);
+  const [completingMission, setCompletingMission] = useState(false);
+  const [selectedMessagePrompt, setSelectedMessagePrompt] = useState(messagePrompts[0]);
+  const [uploadingMessage, setUploadingMessage] = useState(false);
   const [spinning, setSpinning] = useState(false);
   const wheelRotation = useRef(new Animated.Value(0)).current;
   const spinCount = useRef(0);
@@ -179,17 +241,47 @@ const DaresScreen = ({ navigation }) => {
     }
   };
 
+  const loadSecretMission = async () => {
+    const memberName = session?.member_name || session?.owner_name;
+    if (session?.is_preview || !session?.event_id || !memberName) return;
+    try {
+      const response = await daresApi.getSecretMission(session.event_id, memberName);
+      setSecretMission(response.data || null);
+    } catch (error) {
+      console.log('Could not load secret mission:', error?.response?.data || error.message);
+    }
+  };
+
+  const loadMissionCompletions = async () => {
+    if (session?.is_preview || !session?.event_id) return;
+    try {
+      const response = await daresApi.getSecretMissionCompletions(session.event_id);
+      setMissionCompletions(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log('Could not load mission completions:', error?.response?.data || error.message);
+    }
+  };
+
   useEffect(() => {
     loadCustomDares();
     loadCustomSpinnerPairs();
     loadSpinTargets();
     loadRecentSpinResults();
+    loadSecretMission();
+    loadMissionCompletions();
   }, [session?.event_id, session?.event_type]);
 
   useEffect(() => {
     if (session?.is_preview || !session?.event_id) return undefined;
 
     const interval = setInterval(loadRecentSpinResults, 8000);
+    return () => clearInterval(interval);
+  }, [session?.event_id, session?.is_preview]);
+
+  useEffect(() => {
+    if (session?.is_preview || !session?.event_id) return undefined;
+
+    const interval = setInterval(loadMissionCompletions, 12000);
     return () => clearInterval(interval);
   }, [session?.event_id, session?.is_preview]);
 
@@ -292,6 +384,144 @@ const DaresScreen = ({ navigation }) => {
     const nextDare = deck[Math.floor(Math.random() * deck.length)];
     setSelectedCategory(categoryId);
     setCurrentDare(nextDare);
+  };
+
+  const selectGameMode = (mode) => {
+    setSelectedGameMode(mode.id);
+    if (mode.category) {
+      spinDare(mode.category);
+    }
+  };
+
+  const drawSecretMission = async () => {
+    const memberName = session?.member_name || session?.owner_name;
+    if (!memberName) {
+      Alert.alert('Name Needed', 'Join the event with your name first.');
+      return;
+    }
+
+    if (session?.is_preview) {
+      setSecretMission({
+        id: 'preview-mission',
+        mission_text: 'Convince someone it is your birthday without saying the word birthday.',
+        is_completed: false,
+      });
+      return;
+    }
+
+    setLoadingMission(true);
+    try {
+      const response = await daresApi.assignSecretMission({
+        event_id: session.event_id,
+        member_name: memberName,
+      });
+      setSecretMission(response.data);
+    } catch (error) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Could not draw your mission.');
+    } finally {
+      setLoadingMission(false);
+    }
+  };
+
+  const completeSecretMission = async () => {
+    if (!secretMission) return;
+    const memberName = session?.member_name || session?.owner_name;
+
+    if (session?.is_preview) {
+      setSecretMission((current) => ({ ...current, is_completed: true }));
+      return;
+    }
+
+    setCompletingMission(true);
+    try {
+      const response = await daresApi.completeSecretMission(secretMission.id, memberName);
+      setSecretMission(response.data);
+      await loadMissionCompletions();
+      Alert.alert('Mission Complete', 'Logged without revealing what you had to do.');
+    } catch (error) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Could not complete your mission.');
+    } finally {
+      setCompletingMission(false);
+    }
+  };
+
+  const uploadVideoMessage = async (asset) => {
+    const memberName = session?.member_name || session?.owner_name;
+    if (session?.is_preview) {
+      Alert.alert('Preview Mode', 'Create an event to save real video messages.');
+      return;
+    }
+    if (!session?.event_id || !memberName) {
+      Alert.alert('Event Needed', 'Join an event before adding a video message.');
+      return;
+    }
+
+    setUploadingMessage(true);
+    try {
+      const fileName = asset.fileName || asset.uri.split('/').pop() || `video-message-${Date.now()}.mp4`;
+      const mimeType = asset.mimeType || 'video/mp4';
+      const formData = new FormData();
+      formData.append('file', {
+        uri: asset.uri,
+        name: fileName,
+        type: mimeType,
+      });
+
+      const uploadResponse = await fetch(`${api.defaults.baseURL}/media/upload-file`, {
+        method: 'POST',
+        body: formData,
+      });
+      const uploadData = await uploadResponse.json();
+      if (!uploadResponse.ok) {
+        throw new Error(uploadData.detail || 'Upload failed');
+      }
+
+      await api.post('/media/', {
+        event_id: session.event_id,
+        uploaded_by: memberName,
+        file_url: uploadData.file_url,
+        media_type: 'video',
+        caption: `Video Message: ${selectedMessagePrompt}`,
+        thumbnail_url: null,
+      });
+
+      Alert.alert('Message Saved', 'Your video message has been added to the event gallery.');
+    } catch (error) {
+      Alert.alert('Upload Failed', error.message || 'Could not upload this video message.');
+    } finally {
+      setUploadingMessage(false);
+    }
+  };
+
+  const recordVideoMessage = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Camera permission is required to record a video message.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['videos'],
+      allowsEditing: false,
+      videoMaxDuration: 60,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets?.[0]) {
+      await uploadVideoMessage(result.assets[0]);
+    }
+  };
+
+  const chooseVideoMessage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['videos'],
+      allowsEditing: false,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets?.[0]) {
+      await uploadVideoMessage(result.assets[0]);
+    }
   };
 
   const completeDare = () => {
@@ -417,6 +647,31 @@ const DaresScreen = ({ navigation }) => {
           <Text style={styles.heroIcon}>{session?.event_type === 'stag' ? '🍻' : '💃'}</Text>
         </View>
 
+        <View style={styles.modeGrid}>
+          {gameModes.map((mode) => {
+            const active = selectedGameMode === mode.id;
+            return (
+              <TouchableOpacity
+                key={mode.id}
+                style={[
+                  styles.modeCard,
+                  active && {
+                    borderColor: theme.accent,
+                    backgroundColor: `${theme.accent}18`,
+                  },
+                ]}
+                onPress={() => selectGameMode(mode)}
+              >
+                <Ionicons name={mode.icon} size={22} color={active ? theme.accent : colors.textSecondary} />
+                <Text style={[styles.modeTitle, active && { color: theme.accent }]}>{mode.title}</Text>
+                <Text style={styles.modeSubtitle}>{mode.subtitle}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {selectedGameMode === 'spinner' && (
+          <>
         <Card style={[styles.spinnerCard, { borderColor: `${theme.accent}66` }]}>
           <Card.Content style={styles.spinnerContent}>
             <View style={styles.spinnerHeader}>
@@ -509,40 +764,237 @@ const DaresScreen = ({ navigation }) => {
                 <Text style={[styles.dareLabel, { color: theme.accent }]}>Shared Results</Text>
                 <Text style={styles.sharedSpinTitle}>Latest Spins</Text>
               </View>
-              <TouchableOpacity onPress={loadRecentSpinResults}>
-                <Ionicons name="refresh" size={22} color={theme.accent} />
-              </TouchableOpacity>
+              <View style={styles.sharedSpinActions}>
+                <TouchableOpacity onPress={loadRecentSpinResults} style={styles.sharedSpinIconButton}>
+                  <Ionicons name="refresh" size={20} color={theme.accent} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setSpinResultsVisible((visible) => !visible)}
+                  style={styles.sharedSpinToggle}
+                >
+                  <Text style={[styles.sharedSpinToggleText, { color: theme.accent }]}>
+                    {spinResultsVisible ? 'Hide' : `Show ${recentSpinResults.length}`}
+                  </Text>
+                  <Ionicons
+                    name={spinResultsVisible ? 'chevron-up' : 'chevron-down'}
+                    size={18}
+                    color={theme.accent}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
-            {recentSpinResults.length === 0 ? (
-              <Text style={styles.spinnerHint}>Spin results from the crew will show here.</Text>
+            {!spinResultsVisible ? (
+              <Text style={styles.spinnerHint}>
+                {recentSpinResults.length
+                  ? `${recentSpinResults.length} shared spin${recentSpinResults.length === 1 ? '' : 's'} saved.`
+                  : 'Spin results from the crew will show here.'}
+              </Text>
             ) : (
-              recentSpinResults.slice(0, 5).map((result) => (
-                <View key={result.id} style={styles.sharedSpinRow}>
-                  <View style={styles.sharedSpinIcon}>
-                    <Ionicons name="navigate" size={16} color={theme.accent} />
-                  </View>
-                  <View style={styles.sharedSpinTextWrap}>
-                    <Text style={styles.sharedSpinText}>
-                      {result.target_name} got {result.action}
-                    </Text>
-                    <Text style={styles.sharedSpinMeta}>
-                      {result.spinner_title}
-                      {result.spun_by ? ` · spun by ${result.spun_by}` : ''}
-                      {formatSpinTime(result.created_at) ? ` · ${formatSpinTime(result.created_at)}` : ''}
-                    </Text>
-                  </View>
-                </View>
-              ))
+              <>
+                {recentSpinResults.length === 0 ? (
+                  <Text style={styles.spinnerHint}>Spin results from the crew will show here.</Text>
+                ) : (
+                  recentSpinResults.slice(0, 5).map((result) => (
+                    <View key={result.id} style={styles.sharedSpinRow}>
+                      <View style={styles.sharedSpinIcon}>
+                        <Ionicons name="navigate" size={16} color={theme.accent} />
+                      </View>
+                      <View style={styles.sharedSpinTextWrap}>
+                        <Text style={styles.sharedSpinText}>
+                          {result.target_name} got {result.action}
+                        </Text>
+                        <Text style={styles.sharedSpinMeta}>
+                          {result.spinner_title}
+                          {result.spun_by ? ` · spun by ${result.spun_by}` : ''}
+                          {formatSpinTime(result.created_at) ? ` · ${formatSpinTime(result.created_at)}` : ''}
+                        </Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </>
             )}
+            {!spinResultsVisible && recentSpinResults[0] ? (
+              <View style={styles.sharedSpinRowCompact}>
+                <Ionicons name="navigate" size={16} color={theme.accent} />
+                <Text style={styles.sharedSpinCompactText} numberOfLines={1}>
+                  Latest: {recentSpinResults[0].target_name} got {recentSpinResults[0].action}
+                </Text>
+              </View>
+            ) : null}
           </Card.Content>
         </Card>
+          </>
+        )}
 
+        {selectedGameMode === 'missions' && (
+          <>
+            <Card style={[styles.missionCard, { borderColor: `${theme.accent}66` }]}>
+              <Card.Content style={styles.missionContent}>
+                <View style={styles.missionHeader}>
+                  <View>
+                    <Text style={[styles.dareLabel, { color: theme.accent }]}>Complete the Mission</Text>
+                    <Text style={styles.missionTitle}>Your Secret Mission</Text>
+                  </View>
+                  <Ionicons name="eye-off" size={24} color={theme.accent} />
+                </View>
+
+                {secretMission ? (
+                  <View style={styles.secretMissionBox}>
+                    <Text style={styles.secretMissionText}>{secretMission.mission_text}</Text>
+                    <Text style={styles.secretMissionHint}>
+                      Keep it quiet. The crew only sees that you completed a mission.
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.secretMissionBox}>
+                    <Text style={styles.secretMissionText}>Draw a private mission for this event.</Text>
+                    <Text style={styles.secretMissionHint}>
+                      Make someone say a word, get a funny selfie, or start a tiny bit of harmless chaos.
+                    </Text>
+                  </View>
+                )}
+
+                {secretMission?.is_completed ? (
+                  <View style={styles.missionCompleteBadge}>
+                    <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                    <Text style={styles.missionCompleteText}>Mission completed</Text>
+                  </View>
+                ) : (
+                  <View style={styles.dareActions}>
+                    <Button
+                      title={secretMission ? 'Keep Mission' : 'Draw Mission'}
+                      variant={secretMission ? 'outline' : 'primary'}
+                      color={theme.accent}
+                      loading={loadingMission}
+                      onPress={drawSecretMission}
+                      style={styles.dareButton}
+                    />
+                    {secretMission && (
+                      <Button
+                        title="Completed"
+                        variant="primary"
+                        color={theme.accent}
+                        loading={completingMission}
+                        onPress={completeSecretMission}
+                        style={styles.dareButton}
+                      />
+                    )}
+                  </View>
+                )}
+              </Card.Content>
+            </Card>
+
+            <Card style={styles.sharedSpinCard}>
+              <Card.Content style={styles.sharedSpinContent}>
+                <View style={styles.sharedSpinHeader}>
+                  <View>
+                    <Text style={[styles.dareLabel, { color: theme.accent }]}>Mission Board</Text>
+                    <Text style={styles.sharedSpinTitle}>Completed Missions</Text>
+                  </View>
+                  <TouchableOpacity onPress={loadMissionCompletions} style={styles.sharedSpinIconButton}>
+                    <Ionicons name="refresh" size={20} color={theme.accent} />
+                  </TouchableOpacity>
+                </View>
+                {missionCompletions.length === 0 ? (
+                  <Text style={styles.spinnerHint}>Completed missions will show here without revealing the secrets.</Text>
+                ) : (
+                  missionCompletions.slice(0, 6).map((mission) => (
+                    <View key={mission.id} style={styles.completedRow}>
+                      <Ionicons name="checkmark-circle" size={18} color={theme.accent} />
+                      <Text style={styles.completedText}>{mission.member_name} completed a secret mission</Text>
+                    </View>
+                  ))
+                )}
+              </Card.Content>
+            </Card>
+          </>
+        )}
+
+        {selectedGameMode === 'messages' && (
+          <Card style={[styles.missionCard, { borderColor: `${theme.accent}66` }]}>
+            <Card.Content style={styles.missionContent}>
+              <View style={styles.missionHeader}>
+                <View>
+                  <Text style={[styles.dareLabel, { color: theme.accent }]}>Messages & Advice</Text>
+                  <Text style={styles.missionTitle}>Record a Keepsake</Text>
+                </View>
+                <Ionicons name="videocam" size={24} color={theme.accent} />
+              </View>
+
+              <Text style={styles.secretMissionHint}>
+                Pick a prompt, then record a short video for the bride or groom. It saves into the event gallery.
+              </Text>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+                {messagePrompts.map((prompt) => {
+                  const active = selectedMessagePrompt === prompt;
+                  return (
+                    <TouchableOpacity
+                      key={prompt}
+                      style={[
+                        styles.categoryChip,
+                        active && {
+                          borderColor: theme.accent,
+                          backgroundColor: `${theme.accent}22`,
+                        },
+                      ]}
+                      onPress={() => setSelectedMessagePrompt(prompt)}
+                    >
+                      <Text style={[styles.categoryText, active && { color: theme.accent }]}>
+                        {prompt}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <View style={styles.secretMissionBox}>
+                <Text style={styles.secretMissionText}>{selectedMessagePrompt}</Text>
+                <Text style={styles.secretMissionHint}>
+                  Suggested length: 10-60 seconds. Funny, heartfelt, or both.
+                </Text>
+              </View>
+
+              <View style={styles.dareActions}>
+                <Button
+                  title="Record"
+                  variant="primary"
+                  color={theme.accent}
+                  loading={uploadingMessage}
+                  onPress={recordVideoMessage}
+                  style={styles.dareButton}
+                />
+                <Button
+                  title="Choose Video"
+                  variant="outline"
+                  color={theme.accent}
+                  loading={uploadingMessage}
+                  onPress={chooseVideoMessage}
+                  style={styles.dareButton}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.photoProofButton, { borderColor: theme.accent, marginTop: spacing.lg }]}
+                onPress={() => navigation.navigate('Gallery')}
+              >
+                <Ionicons name="images" size={20} color={theme.accent} />
+                <Text style={[styles.photoProofText, { color: theme.accent }]}>View Gallery Messages</Text>
+              </TouchableOpacity>
+            </Card.Content>
+          </Card>
+        )}
+
+        {selectedGameMode === 'dares' && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryRow}
         >
-          {categories.map((category) => {
+          {categories
+            .filter((category) => category.id === 'warmup' || category.id === 'cheeky')
+            .map((category) => {
             const active = selectedCategory === category.id;
             return (
               <TouchableOpacity
@@ -568,11 +1020,19 @@ const DaresScreen = ({ navigation }) => {
             );
           })}
         </ScrollView>
+        )}
+
+        {(selectedGameMode === 'dares' || selectedGameMode === 'photo' || selectedGameMode === 'drinks') && (
+          <>
 
         <Card style={[styles.dareCard, { borderColor: `${theme.accent}66` }]}>
           <Card.Content style={styles.dareContent}>
             <Text style={[styles.dareLabel, { color: theme.accent }]}>
-              {categories.find((category) => category.id === selectedCategory)?.title}
+              {selectedGameMode === 'photo'
+                ? 'Photo Challenge'
+                : selectedGameMode === 'drinks'
+                ? 'Drinking Game'
+                : categories.find((category) => category.id === selectedCategory)?.title}
             </Text>
             <Text style={styles.dareText}>{currentDare.text}</Text>
             <Text style={[styles.dareSource, { color: theme.accent }]}>
@@ -584,14 +1044,14 @@ const DaresScreen = ({ navigation }) => {
             </Text>
             <View style={styles.dareActions}>
               <Button
-                title="Spin Again"
+                title={selectedGameMode === 'photo' ? 'New Challenge' : selectedGameMode === 'drinks' ? 'New Round' : 'Spin Again'}
                 variant="outline"
                 color={theme.accent}
-                onPress={() => spinDare()}
+                onPress={() => spinDare(selectedGameMode === 'photo' ? 'photo' : selectedGameMode === 'drinks' ? 'drinks' : selectedCategory)}
                 style={styles.dareButton}
               />
               <Button
-                title="Completed"
+                title={selectedGameMode === 'photo' ? 'Photo Done' : 'Completed'}
                 variant="primary"
                 color={theme.accent}
                 onPress={completeDare}
@@ -600,6 +1060,8 @@ const DaresScreen = ({ navigation }) => {
             </View>
           </Card.Content>
         </Card>
+          </>
+        )}
 
         <View style={styles.secondaryActions}>
           {isOwner && (
@@ -611,15 +1073,19 @@ const DaresScreen = ({ navigation }) => {
               <Text style={[styles.photoProofText, { color: theme.accent }]}>Manage Owner Games</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            style={[styles.photoProofButton, { borderColor: theme.accent }]}
-            onPress={() => navigation.navigate('Gallery')}
-          >
-            <Ionicons name="camera" size={20} color={theme.accent} />
-            <Text style={[styles.photoProofText, { color: theme.accent }]}>Add Photo Proof</Text>
-          </TouchableOpacity>
+          {selectedGameMode !== 'spinner' && selectedGameMode !== 'missions' && selectedGameMode !== 'messages' && (
+            <TouchableOpacity
+              style={[styles.photoProofButton, { borderColor: theme.accent }]}
+              onPress={() => navigation.navigate('Gallery')}
+            >
+              <Ionicons name="camera" size={20} color={theme.accent} />
+              <Text style={[styles.photoProofText, { color: theme.accent }]}>Add Photo Proof</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
+        {selectedGameMode !== 'spinner' && selectedGameMode !== 'missions' && selectedGameMode !== 'messages' && (
+          <>
         <Text style={styles.sectionTitle}>Recently Completed</Text>
         {completed.length === 0 ? (
           <View style={styles.emptyBox}>
@@ -638,6 +1104,8 @@ const DaresScreen = ({ navigation }) => {
           <Text style={styles.drinkNote}>
             Keep drinking games optional and sensible. Water rounds count.
           </Text>
+        )}
+          </>
         )}
       </ScrollView>
 
@@ -830,6 +1298,33 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingBottom: spacing.lg,
   },
+  modeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  modeCard: {
+    width: '48%',
+    minHeight: 116,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    justifyContent: 'space-between',
+  },
+  modeTitle: {
+    ...typography.body,
+    color: colors.text,
+    fontWeight: '800',
+    marginTop: spacing.sm,
+  },
+  modeSubtitle: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+  },
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -957,7 +1452,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: spacing.md,
     marginBottom: spacing.md,
+  },
+  sharedSpinActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  sharedSpinIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
+  sharedSpinToggle: {
+    minHeight: 36,
+    borderRadius: 18,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.background,
+  },
+  sharedSpinToggleText: {
+    ...typography.bodySmall,
+    fontWeight: '700',
   },
   sharedSpinTitle: {
     ...typography.h3,
@@ -992,6 +1514,68 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textMuted,
     marginTop: spacing.xs,
+  },
+  sharedSpinRowCompact: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  sharedSpinCompactText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  missionCard: {
+    marginBottom: spacing.lg,
+  },
+  missionContent: {
+    padding: spacing.lg,
+  },
+  missionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  missionTitle: {
+    ...typography.h2,
+    color: colors.text,
+  },
+  secretMissionBox: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  secretMissionText: {
+    ...typography.h3,
+    color: colors.text,
+    lineHeight: 28,
+  },
+  secretMissionHint: {
+    ...typography.bodySmall,
+    color: colors.textMuted,
+    marginTop: spacing.md,
+  },
+  missionCompleteBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: 12,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+  },
+  missionCompleteText: {
+    ...typography.button,
+    color: colors.success,
   },
   dareContent: {
     padding: spacing.lg,

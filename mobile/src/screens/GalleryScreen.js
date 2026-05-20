@@ -469,6 +469,7 @@ export default function GalleryScreen(props) {
 
   const renderMediaItem = ({ item, index }) => {
     const isVideo = item.media_type === 'video';
+    const isVideoMessage = item.caption?.startsWith('Video Message:');
 
     return (
       <TouchableOpacity
@@ -513,6 +514,13 @@ export default function GalleryScreen(props) {
         {isVideo && (
           <View style={styles.videoIndicator}>
             <Ionicons name="play" size={18} color="white" />
+          </View>
+        )}
+
+        {isVideoMessage && (
+          <View style={styles.messageTag}>
+            <Ionicons name="heart" size={11} color="white" />
+            <Text style={styles.messageTagText}>Message</Text>
           </View>
         )}
 
@@ -658,16 +666,23 @@ export default function GalleryScreen(props) {
                   {media.map((item, idx) => (
                     <View key={item.id} style={{ width, height: '100%' }}>
                       {item.media_type === 'video' ? (
-                        <Video
-                          ref={(ref) => {
-                            videoRefs.current[idx] = ref;
-                          }}
-                          source={{ uri: item.file_url }}
-                          style={styles.fullscreenMedia}
-                          resizeMode={ResizeMode.CONTAIN}
-                          shouldPlay={idx === selectedIndex}
-                          useNativeControls
-                        />
+                        <View style={styles.fullscreenVideoWrap}>
+                          <Video
+                            ref={(ref) => {
+                              videoRefs.current[idx] = ref;
+                            }}
+                            source={{ uri: item.file_url }}
+                            style={styles.fullscreenMedia}
+                            resizeMode={ResizeMode.CONTAIN}
+                            shouldPlay={idx === selectedIndex}
+                            useNativeControls
+                          />
+                          {item.caption?.startsWith('Video Message:') && (
+                            <View style={styles.fullscreenCaption}>
+                              <Text style={styles.fullscreenCaptionText}>{item.caption}</Text>
+                            </View>
+                          )}
+                        </View>
                       ) : idx === selectedIndex ? (
                         <View style={styles.filteredContainer}>
                           <ViewShot
@@ -837,6 +852,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  messageTag: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    backgroundColor: 'rgba(233, 69, 96, 0.92)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  messageTagText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: '700',
+  },
   uploaderTag: {
     position: 'absolute',
     bottom: 6,
@@ -889,6 +921,25 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: 'black',
+  },
+  fullscreenVideoWrap: {
+    flex: 1,
+    backgroundColor: 'black',
+  },
+  fullscreenCaption: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    bottom: 34,
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: 'rgba(0,0,0,0.58)',
+  },
+  fullscreenCaptionText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
   },
   fullscreenContainer: {
     flex: 1,

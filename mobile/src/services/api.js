@@ -102,6 +102,20 @@ export const daresApi = {
     }),
   getSpinResults: (eventId) => api.get(`/dares/spin-results/${eventId}`),
   createSpinResult: (data) => api.post('/dares/spin-results', data),
+  getSecretMission: (eventId, memberName) =>
+    api.get(`/dares/secret-mission/${eventId}`, {
+      params: {
+        member_name: memberName,
+      },
+    }),
+  assignSecretMission: (data) => api.post('/dares/secret-mission/assign', data),
+  completeSecretMission: (missionId, memberName) =>
+    api.put(`/dares/secret-mission/${missionId}/complete`, null, {
+      params: {
+        member_name: memberName,
+      },
+    }),
+  getSecretMissionCompletions: (eventId) => api.get(`/dares/secret-missions/${eventId}/completions`),
   create: (data, ownerPin) =>
     api.post('/dares/', data, {
       params: {

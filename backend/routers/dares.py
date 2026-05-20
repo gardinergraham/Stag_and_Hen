@@ -3,14 +3,40 @@ from typing import List, Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from datetime import datetime
+import random
 
-from models.dare import Dare, DareCreate, SpinResult, SpinResultCreate, SpinnerPair, SpinnerPairCreate
+from models.dare import (
+    Dare,
+    DareCreate,
+    SecretMission,
+    SecretMissionAssign,
+    SecretMissionCompletion,
+    SpinResult,
+    SpinResultCreate,
+    SpinnerPair,
+    SpinnerPairCreate,
+)
 
 router = APIRouter(prefix="/dares", tags=["dares"])
 
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
+
+SECRET_MISSION_TEMPLATES = [
+    "Make someone say the word pineapple without telling them why.",
+    "Get a selfie with security or a staff member.",
+    "Convince someone outside the group that it is your birthday.",
+    "Get the guest of honour to sing one line of a song.",
+    "Start a toast and get at least three people to join in.",
+    "Find someone wearing the party colour and get a photo.",
+    "Get someone to call the guest of honour by a new nickname.",
+    "Borrow a harmless prop for a photo and return it straight away.",
+    "Start a chant without explaining why.",
+    "Get three people to do the same pose in one photo.",
+    "Make someone tell you their best marriage advice.",
+    "Get the group to cheer for no obvious reason.",
+]
 
 
 def is_global_admin(admin_username: Optional[str], admin_password: Optional[str]) -> bool:
@@ -42,6 +68,14 @@ def normalize_spin_result(result):
     if isinstance(result.get("created_at"), str):
         result["created_at"] = datetime.fromisoformat(result["created_at"].replace("Z", "+00:00"))
     return result
+
+
+def normalize_secret_mission(mission):
+    if isinstance(mission.get("created_at"), str):
+        mission["created_at"] = datetime.fromisoformat(mission["created_at"].replace("Z", "+00:00"))
+    if mission.get("completed_at") and isinstance(mission["completed_at"], str):
+        mission["completed_at"] = datetime.fromisoformat(mission["completed_at"].replace("Z", "+00:00"))
+    return mission
 
 
 @router.get("/", response_model=List[Dare])
@@ -229,6 +263,83 @@ async def create_spin_result(result_input: SpinResultCreate):
     result_doc["created_at"] = result_doc["created_at"].isoformat()
     await db.spin_results.insert_one(result_doc)
     return result
+
+
+@router.get("/secret-mission/{event_id}", response_model=Optional[SecretMission])
+async def get_secret_mission(event_id: str, member_name: str):
+    mission = await db.secret_missions.find_one(
+        {
+            "event_id": event_id,
+            "member_name": member_name,
+            "is_active": True,
+        },
+        {"_id": 0},
+    )
+    if not mission:
+        return None
+    return normalize_secret_mission(mission)
+
+
+@router.post("/secret-mission/assign", response_model=SecretMission)
+async def assign_secret_mission(mission_input: SecretMissionAssign):
+    event = await db.events.find_one({"id": mission_input.event_id, "is_active": True})
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    existing = await db.secret_missions.find_one(
+        {
+            "event_id": mission_input.event_id,
+            "member_name": mission_input.member_name,
+            "is_active": True,
+        },
+        {"_id": 0},
+    )
+    if existing:
+        return normalize_secret_mission(existing)
+
+    mission = SecretMission(
+        event_id=mission_input.event_id,
+        member_name=mission_input.member_name,
+        mission_text=random.choice(SECRET_MISSION_TEMPLATES),
+    )
+    mission_doc = mission.model_dump()
+    mission_doc["created_at"] = mission_doc["created_at"].isoformat()
+    await db.secret_missions.insert_one(mission_doc)
+    return mission
+
+
+@router.put("/secret-mission/{mission_id}/complete", response_model=SecretMission)
+async def complete_secret_mission(mission_id: str, member_name: str):
+    mission = await db.secret_missions.find_one({"id": mission_id, "is_active": True})
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+
+    if mission.get("member_name") != member_name:
+        raise HTTPException(status_code=403, detail="This is not your mission")
+
+    completed_at = datetime.utcnow().isoformat()
+    await db.secret_missions.update_one(
+        {"id": mission_id},
+        {"$set": {"is_completed": True, "completed_at": completed_at}},
+    )
+    updated = await db.secret_missions.find_one({"id": mission_id}, {"_id": 0})
+    return normalize_secret_mission(updated)
+
+
+@router.get("/secret-missions/{event_id}/completions", response_model=List[SecretMissionCompletion])
+async def get_secret_mission_completions(event_id: str):
+    missions = await db.secret_missions.find(
+        {"event_id": event_id, "is_active": True, "is_completed": True},
+        {
+            "_id": 0,
+            "id": 1,
+            "event_id": 1,
+            "member_name": 1,
+            "is_completed": 1,
+            "completed_at": 1,
+        },
+    ).sort("completed_at", -1).to_list(100)
+    return [normalize_secret_mission(mission) for mission in missions]
 
 
 @router.put("/{dare_id}", response_model=Dare)

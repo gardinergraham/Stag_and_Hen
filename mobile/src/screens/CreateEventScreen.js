@@ -22,6 +22,8 @@ const CreateEventScreen = ({ navigation }) => {
     bride_groom_name: '',
     owner_name: '',
     description: '',
+    event_tier: 'prime',
+    event_tier_price: 95,
     media_delete_policy: 'never',
   });
   const STAG_BLUE = '#2563EB';
@@ -32,12 +34,38 @@ const CreateEventScreen = ({ navigation }) => {
     { id: 'hen', label: 'Hen Party', emoji: '🐔' },
   ];
 
-  const deletePolicies = [
-    { id: 'never', label: 'Keep Forever' },
-    { id: '1_day', label: 'Delete after 1 Day' },
-    { id: '1_week', label: 'Delete after 1 Week' },
-    { id: '1_month', label: 'Delete after 1 Month' },
+  const eventTiers = [
+    {
+      id: 'one_day',
+      name: 'One Day',
+      price: 25,
+      media_delete_policy: '1_day',
+      detail: 'Media deletes after 24 hours',
+    },
+    {
+      id: 'extended',
+      name: 'Extended',
+      price: 55,
+      media_delete_policy: '1_month',
+      detail: 'Media kept for the month',
+    },
+    {
+      id: 'prime',
+      name: 'Prime',
+      price: 95,
+      media_delete_policy: 'never',
+      detail: 'Media kept forever',
+    },
   ];
+
+  const selectTier = (tier) => {
+    setForm({
+      ...form,
+      event_tier: tier.id,
+      event_tier_price: tier.price,
+      media_delete_policy: tier.media_delete_policy,
+    });
+  };
 
   const handleCreate = async () => {
     if (!form.event_name || !form.bride_groom_name || !form.owner_name) {
@@ -59,12 +87,24 @@ const CreateEventScreen = ({ navigation }) => {
         role: 'owner',
         owner_pin: event.owner_pin,
         access_pin: event.access_pin,
+        event_tier: event.event_tier,
+        event_tier_price: event.event_tier_price,
       });
 
       Alert.alert(
         'Event Created!',
-        `Your ${form.event_type === 'stag' ? 'Stag Do' : 'Hen Party'} is ready!\n\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nKeep these safe!`,
-        [{ text: 'Let\'s Go!', onPress: () => navigation.replace('Main') }]
+        `Your ${form.event_type === 'stag' ? 'Stag Do' : 'Hen Party'} is ready!\n\nPackage: £${event.event_tier_price?.toFixed?.(2) || form.event_tier_price.toFixed(2)}\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nKeep these safe!`,
+        [
+          {
+            text: 'Show QR Code',
+            onPress: () =>
+              navigation.reset({
+                index: 1,
+                routes: [{ name: 'Main' }, { name: 'ShareQR' }],
+              }),
+          },
+          { text: 'Go Home', onPress: () => navigation.replace('Main') },
+        ]
       );
     } catch (error) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to create event');
@@ -140,27 +180,29 @@ const CreateEventScreen = ({ navigation }) => {
           numberOfLines={3}
         />
 
-        <Text style={styles.sectionTitle}>Media Auto-Delete</Text>
-        <View style={styles.policyGrid}>
-          {deletePolicies.map((policy) => (
+        <Text style={styles.sectionTitle}>Choose Event Package</Text>
+        <View style={styles.tierList}>
+          {eventTiers.map((tier) => {
+            const active = form.event_tier === tier.id;
+            return (
             <TouchableOpacity
-              key={policy.id}
+              key={tier.id}
               style={[
-                styles.policyOption,
-                form.media_delete_policy === policy.id && styles.policyOptionActive,
+                styles.tierOption,
+                active && styles.tierOptionActive,
               ]}
-              onPress={() => setForm({ ...form, media_delete_policy: policy.id })}
+              onPress={() => selectTier(tier)}
             >
-              <Text
-                style={[
-                  styles.policyLabel,
-                  form.media_delete_policy === policy.id && styles.policyLabelActive,
-                ]}
-              >
-                {policy.label}
-              </Text>
+              <View style={styles.tierHeader}>
+                <Text style={[styles.tierName, active && styles.tierNameActive]}>
+                  {tier.name}
+                </Text>
+                <Text style={styles.tierPrice}>£{tier.price.toFixed(2)}</Text>
+              </View>
+              <Text style={styles.tierDetail}>{tier.detail}</Text>
             </TouchableOpacity>
-          ))}
+            );
+          })}
         </View>
 
        <Button
@@ -233,30 +275,42 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     marginTop: spacing.sm,
   },
-  policyGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
+  tierList: {
+    gap: spacing.md,
     marginBottom: spacing.xl,
   },
-  policyOption: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: 20,
+  tierOption: {
+    padding: spacing.md,
+    borderRadius: 12,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  policyOptionActive: {
-    borderColor: colors.secondary,
-    backgroundColor: `${colors.secondary}20`,
+  tierOptionActive: {
+    borderColor: colors.gold,
+    backgroundColor: `${colors.gold}15`,
   },
-  policyLabel: {
+  tierHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  tierName: {
+    ...typography.h3,
+    color: colors.text,
+  },
+  tierNameActive: {
+    color: colors.gold,
+  },
+  tierPrice: {
+    ...typography.h3,
+    color: colors.gold,
+  },
+  tierDetail: {
     ...typography.bodySmall,
     color: colors.textSecondary,
-  },
-  policyLabelActive: {
-    color: colors.secondary,
   },
   createButton: {
     marginTop: spacing.md,

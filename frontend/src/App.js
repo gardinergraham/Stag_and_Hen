@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
-import { Camera, Users, ShoppingBag, Wallet, QrCode, Shield, PartyPopper, Heart, Check, Smartphone, Apple, Plus, RefreshCw, Lock, ExternalLink, Save, Trash2, X } from "lucide-react";
+import { Camera, Users, ShoppingBag, Wallet, QrCode, Shield, PartyPopper, Heart, Check, Smartphone, Apple, Plus, RefreshCw, Lock, ExternalLink, Save, Trash2, X, ClipboardList } from "lucide-react";
 import "@/App.css";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "https://stagandhen-production.up.railway.app";
@@ -276,8 +276,10 @@ const AdminPage = () => {
   const [isAuthed, setIsAuthed] = useState(false);
   const [form, setForm] = useState(emptyShopForm);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedRequest, setSelectedRequest] = useState(null);
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
+  const [requests, setRequests] = useState([]);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -287,12 +289,19 @@ const AdminPage = () => {
     setLoading(true);
     setError("");
     try {
-      const [itemsRes, categoriesRes] = await Promise.all([
+      const [itemsRes, categoriesRes, requestsRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/shop/items`),
         axios.get(`${API_BASE_URL}/shop/categories`),
+        axios.get(`${API_BASE_URL}/shop-requests/`, {
+          params: {
+            status: "pending",
+            ...getAdminParams(),
+          },
+        }),
       ]);
       setItems(itemsRes.data);
       setCategories(categoriesRes.data.categories);
+      setRequests(requestsRes.data);
     } catch (err) {
       setError(err.response?.data?.detail || "Could not load shop data.");
     } finally {
@@ -317,9 +326,25 @@ const AdminPage = () => {
 
   const resetForm = () => {
     setSelectedItem(null);
+    setSelectedRequest(null);
     setForm(emptyShopForm);
     setError("");
     setStatus("");
+  };
+
+  const selectRequest = (request) => {
+    setSelectedRequest(request);
+    setSelectedItem(null);
+    setForm({
+      name: request.product_name || "",
+      description: request.notes || "",
+      price: "",
+      affiliate_url: request.product_url || "",
+      image_url: "",
+      category: "other",
+    });
+    setError("");
+    setStatus("Request loaded. Add price/image/category, then save as a shop item.");
   };
 
   const selectItem = (item) => {
@@ -384,14 +409,52 @@ const AdminPage = () => {
         await axios.post(`${API_BASE_URL}/shop/items`, payload, {
           params: getAdminParams(),
         });
+        if (selectedRequest) {
+          await axios.put(`${API_BASE_URL}/shop-requests/${selectedRequest.id}/status`, null, {
+            params: {
+              status: "approved",
+              ...getAdminParams(),
+            },
+          });
+        }
         setStatus("Product added to the party shop.");
       }
 
       setSelectedItem(null);
+      setSelectedRequest(null);
       setForm(emptyShopForm);
       await loadShopData();
     } catch (err) {
       setError(err.response?.data?.detail || "Could not save this product.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const rejectRequest = async (request) => {
+    const confirmed = window.confirm(`Reject "${request.product_name}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      await axios.put(`${API_BASE_URL}/shop-requests/${request.id}/status`, null, {
+        params: {
+          status: "rejected",
+          ...getAdminParams(),
+        },
+      });
+      if (selectedRequest?.id === request.id) {
+        setSelectedRequest(null);
+        setForm(emptyShopForm);
+      }
+      setStatus("Request rejected.");
+      await loadShopData();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Could not update this request.");
     } finally {
       setSaving(false);
     }
@@ -484,7 +547,7 @@ const AdminPage = () => {
           <div className="admin-card-header">
             {selectedItem ? <Save size={20} /> : <Plus size={20} />}
             <div>
-              <p>{selectedItem ? "Editing Product" : "New Product"}</p>
+              <p>{selectedItem ? "Editing Product" : selectedRequest ? "From Wishlist" : "New Product"}</p>
               <h1>{selectedItem ? "Update Shop Item" : "Add Shop Item"}</h1>
             </div>
           </div>
@@ -548,6 +611,12 @@ const AdminPage = () => {
 
           {error && <div className="admin-alert admin-alert-error">{error}</div>}
           {status && <div className="admin-alert admin-alert-success">{status}</div>}
+          {selectedRequest && (
+            <div className="admin-request-note">
+              Request from {selectedRequest.requester_name}
+              {selectedRequest.event_name ? ` for ${selectedRequest.event_name}` : ""}
+            </div>
+          )}
 
           <div className="admin-form-actions">
             <button className="btn btn-primary admin-submit" type="submit" disabled={saving}>
@@ -564,6 +633,42 @@ const AdminPage = () => {
         </form>
 
         <aside className="admin-card admin-preview">
+          <div className="admin-card-header">
+            <ClipboardList size={20} />
+            <div>
+              <p>Wishlist</p>
+              <h2>{requests.length} Requests</h2>
+            </div>
+          </div>
+          <div className="admin-request-list">
+            {requests.length === 0 ? (
+              <p className="admin-empty-text">No pending product requests.</p>
+            ) : (
+              requests.map((request) => (
+                <article
+                  className={`admin-request-row ${selectedRequest?.id === request.id ? "admin-product-row-selected" : ""}`}
+                  key={request.id}
+                >
+                  <button className="admin-request-main" type="button" onClick={() => selectRequest(request)}>
+                    <h3>{request.product_name}</h3>
+                    <p>{request.requester_name}{request.event_name ? ` · ${request.event_name}` : ""}</p>
+                    {request.notes && <span>{request.notes}</span>}
+                  </button>
+                  <div className="admin-product-actions">
+                    {request.product_url && (
+                      <a href={request.product_url} target="_blank" rel="noreferrer" aria-label={`Open ${request.product_name}`}>
+                        <ExternalLink size={16} />
+                      </a>
+                    )}
+                    <button type="button" onClick={() => rejectRequest(request)} aria-label={`Reject ${request.product_name}`}>
+                      <X size={16} />
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+
           <div className="admin-card-header">
             <ShoppingBag size={20} />
             <div>

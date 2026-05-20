@@ -18,8 +18,6 @@ import {
   ShopScreen,
   KittyScreen,
   ShareQRScreen,
-  AdminSettingsScreen,
-  AdminLoginScreen,
 } from '../screens';
 
 const Stack = createNativeStackNavigator();
@@ -131,11 +129,6 @@ const AppNavigator = () => {
           options={{ title: 'Owner Login' }}
         />
         <Stack.Screen
-          name="AdminLogin"
-          component={AdminLoginScreen}
-          options={{ title: 'Admin Login' }}
-        />
-        <Stack.Screen
           name="ScanQR"
           component={ScanQRScreen}
           options={{ title: 'Scan QR Code' }}
@@ -153,11 +146,6 @@ const AppNavigator = () => {
           name="ShareQR"
           component={ShareQRScreen}
           options={{ title: 'Share Access' }}
-        />
-        <Stack.Screen
-          name="AdminSettings"
-          component={AdminSettingsScreen}
-          options={{ title: 'Admin Settings' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

@@ -9,9 +9,15 @@ import {
   Image,
   Linking,
   Alert,
+  Modal,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { colors, typography, spacing } from '../theme';
-import { Card } from '../components';
+import { Card, Button, TextInput } from '../components';
 import { shopApi } from '../services/api';
 import { useApp } from '../context/AppContext';
 
@@ -21,6 +27,13 @@ const ShopScreen = () => {
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [requestForm, setRequestForm] = useState({
+    product_name: '',
+    product_url: '',
+    notes: '',
+  });
+  const [submittingRequest, setSubmittingRequest] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -50,6 +63,41 @@ const ShopScreen = () => {
     } catch (error) {
       // Still open the link even if tracking fails
       Linking.openURL(item.affiliate_url);
+    }
+  };
+
+  const resetRequestForm = () => {
+    Keyboard.dismiss();
+    setShowRequestModal(false);
+    setRequestForm({
+      product_name: '',
+      product_url: '',
+      notes: '',
+    });
+  };
+
+  const handleSubmitRequest = async () => {
+    if (!requestForm.product_name.trim()) {
+      Alert.alert('Product Needed', 'Tell us what item you want added.');
+      return;
+    }
+
+    setSubmittingRequest(true);
+    try {
+      await shopApi.createRequest({
+        event_id: session?.is_preview ? null : session?.event_id,
+        event_name: session?.event_name,
+        requester_name: session?.member_name || 'Guest',
+        product_name: requestForm.product_name.trim(),
+        product_url: requestForm.product_url.trim() || null,
+        notes: requestForm.notes.trim() || null,
+      });
+      resetRequestForm();
+      Alert.alert('Request Sent', 'Thanks. We will review it and add it to the shop if it fits.');
+    } catch (error) {
+      Alert.alert('Error', error.response?.data?.detail || 'Could not send this request.');
+    } finally {
+      setSubmittingRequest(false);
     }
   };
 
@@ -118,6 +166,13 @@ const ShopScreen = () => {
       <View style={styles.header}>
         <Text style={styles.title}>Party Shop</Text>
         <Text style={styles.subtitle}>Everything you need for the perfect party!</Text>
+        <Button
+          title="Request an Item"
+          variant="outline"
+          size="small"
+          onPress={() => setShowRequestModal(true)}
+          style={styles.requestButton}
+        />
       </View>
 
       <FlatList
@@ -143,6 +198,65 @@ const ShopScreen = () => {
           </View>
         }
       />
+
+      <Modal visible={showRequestModal} animationType="slide" transparent>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <View style={styles.modalTouchArea}>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.modalScrollContent}
+              >
+                <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>Request an Item</Text>
+                  <Text style={styles.modalSubtitle}>
+                    Suggest a product and we can add it to the shop catalogue.
+                  </Text>
+                  <TextInput
+                    label="Item Name *"
+                    placeholder="e.g., cowboy hats, pink sashes"
+                    value={requestForm.product_name}
+                    onChangeText={(text) => setRequestForm({ ...requestForm, product_name: text })}
+                  />
+                  <TextInput
+                    label="Shop Link (Optional)"
+                    placeholder="Paste Amazon or shop link"
+                    value={requestForm.product_url}
+                    onChangeText={(text) => setRequestForm({ ...requestForm, product_url: text })}
+                    autoCapitalize="none"
+                  />
+                  <TextInput
+                    label="Notes (Optional)"
+                    placeholder="Size, colour, quantity, theme..."
+                    value={requestForm.notes}
+                    onChangeText={(text) => setRequestForm({ ...requestForm, notes: text })}
+                    multiline
+                    numberOfLines={3}
+                  />
+                  <View style={styles.modalActions}>
+                    <Button
+                      title="Cancel"
+                      variant="outline"
+                      onPress={resetRequestForm}
+                      style={styles.modalButton}
+                    />
+                    <Button
+                      title="Send Request"
+                      variant="primary"
+                      loading={submittingRequest}
+                      onPress={handleSubmitRequest}
+                      style={styles.modalButton}
+                    />
+                  </View>
+                </View>
+              </ScrollView>
+            </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -163,6 +277,10 @@ const styles = StyleSheet.create({
   subtitle: {
     ...typography.body,
     color: colors.textSecondary,
+    marginBottom: spacing.md,
+  },
+  requestButton: {
+    alignSelf: 'flex-start',
   },
   categoriesList: {
     paddingHorizontal: spacing.lg,
@@ -256,6 +374,42 @@ const styles = StyleSheet.create({
   emptyText: {
     ...typography.body,
     color: colors.textSecondary,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+  },
+  modalTouchArea: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: spacing.xl,
+  },
+  modalTitle: {
+    ...typography.h2,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  modalButton: {
+    flex: 1,
   },
 });
 

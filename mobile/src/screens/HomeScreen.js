@@ -17,12 +17,28 @@ import { useApp } from '../context/AppContext';
 
 const HomeScreen = ({ navigation }) => {
   const { session, isOwner, logout } = useApp();
+  const isPreview = session?.is_preview;
   const [refreshing, setRefreshing] = useState(false);
   const [event, setEvent] = useState(null);
   const [kittyBalance, setKittyBalance] = useState(0);
   const [members, setMembers] = useState([]);
 
   const loadData = async () => {
+    if (isPreview) {
+      setEvent({
+        event_name: session.event_name,
+        event_type: session.event_type,
+      });
+      setKittyBalance(185);
+      setMembers([
+        { id: 'preview-owner', name: 'Graham', role: 'owner' },
+        { id: 'preview-1', name: 'Maid of Honour', role: 'crew' },
+        { id: 'preview-2', name: 'Best Mate', role: 'crew' },
+        { id: 'preview-3', name: 'The Crew', role: 'crew' },
+      ]);
+      return;
+    }
+
     try {
       const [eventRes, kittyRes, membersRes] = await Promise.all([
         eventsApi.getById(session.event_id),
@@ -48,10 +64,10 @@ const HomeScreen = ({ navigation }) => {
   }, []);
 
   const handleLogout = () => {
-    Alert.alert('Leave Event', 'Are you sure you want to leave this event?', [
+    Alert.alert(isPreview ? 'Exit Preview' : 'Leave Event', isPreview ? 'Exit the app preview?' : 'Are you sure you want to leave this event?', [
       { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Leave',
+        text: isPreview ? 'Exit' : 'Leave',
         style: 'destructive',
         onPress: async () => {
           await logout();
@@ -93,23 +109,35 @@ const HomeScreen = ({ navigation }) => {
               Hey {session.member_name}! 👋
             </Text>
             <Text style={styles.roleText}>
-              {isOwner ? '👑 You\'re the organizer' : '🎉 You\'re part of the crew'}
+              {isPreview ? 'Preview mode: explore before creating an event' : isOwner ? '👑 You\'re the organizer' : '🎉 You\'re part of the crew'}
             </Text>
+            {isPreview && (
+              <Button
+                title="Create Your Event"
+                variant="gold"
+                size="small"
+                onPress={async () => {
+                  await logout();
+                  navigation.replace('CreateEvent');
+                }}
+                style={styles.previewButton}
+              />
+            )}
           </Card.Content>
         </Card>
 
         {/* Quick Stats */}
-        <View style={styles.statsRow}>
-          <Card style={styles.statCard} onPress={() => navigation.navigate('Kitty')}>
-            <Card.Content style={styles.statContent}>
+        <View style={styles.statsBlock}>
+          <Card style={styles.kittyStatCard} onPress={() => navigation.navigate('Kitty')}>
+            <Card.Content style={styles.kittyStatContent}>
               <Text style={styles.statValue}>£{kittyBalance.toFixed(2)}</Text>
               <Text style={styles.statLabel}>Kitty Balance</Text>
             </Card.Content>
           </Card>
-          <Card style={styles.statCard}>
-            <Card.Content style={styles.statContent}>
-              <Text style={styles.statValue}>{members.length}</Text>
-              <Text style={styles.statLabel}>Crew Members</Text>
+          <Card style={styles.crewStatCard}>
+            <Card.Content style={styles.crewStatContent}>
+              <Text style={styles.crewStatLabel}>Crew Members</Text>
+              <Text style={styles.crewStatValue}>{members.length}</Text>
             </Card.Content>
           </Card>
         </View>
@@ -145,15 +173,6 @@ const HomeScreen = ({ navigation }) => {
             >
               <Text style={styles.actionIcon}>📲</Text>
               <Text style={styles.actionLabel}>Share QR</Text>
-            </TouchableOpacity>
-          )}
-          {isOwner && (
-            <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: `${colors.primary}20` }]}
-              onPress={() => navigation.navigate('AdminSettings')}
-            >
-              <Text style={styles.actionIcon}>⚙️</Text>
-              <Text style={styles.actionLabel}>Admin</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -234,25 +253,48 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
   },
-  statsRow: {
-    flexDirection: 'row',
+  previewButton: {
+    marginTop: spacing.md,
+    alignSelf: 'flex-start',
+  },
+  statsBlock: {
     gap: spacing.md,
     marginBottom: spacing.xl,
   },
-  statCard: {
-    flex: 1,
+  kittyStatCard: {
+    width: '100%',
   },
-  statContent: {
+  kittyStatContent: {
     alignItems: 'center',
+    paddingVertical: spacing.lg,
+  },
+  crewStatCard: {
+    width: '100%',
+  },
+  crewStatContent: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
   },
   statValue: {
-    ...typography.h1,
+    fontSize: 44,
+    fontWeight: '800',
     color: colors.gold,
+    textAlign: 'center',
   },
   statLabel: {
     ...typography.caption,
     color: colors.textSecondary,
     textTransform: 'uppercase',
+  },
+  crewStatLabel: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
+  crewStatValue: {
+    ...typography.h2,
+    color: colors.gold,
   },
   sectionTitle: {
     ...typography.h3,

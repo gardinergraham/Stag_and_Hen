@@ -41,9 +41,34 @@ const colourFilters = [
   { name: 'kodachrome', component: Kodachrome },
 ];
 
+const previewMedia = [
+  {
+    id: 'preview-photo-1',
+    media_type: 'image',
+    file_url: 'https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=900',
+    thumbnail_url: 'https://images.unsplash.com/photo-1517457373958-b7bdd4587205?w=400',
+    uploaded_by: 'Maid of Honour',
+  },
+  {
+    id: 'preview-photo-2',
+    media_type: 'image',
+    file_url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=900',
+    thumbnail_url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400',
+    uploaded_by: 'Best Mate',
+  },
+  {
+    id: 'preview-photo-3',
+    media_type: 'image',
+    file_url: 'https://images.unsplash.com/photo-1505236858219-8359eb29e329?w=900',
+    thumbnail_url: 'https://images.unsplash.com/photo-1505236858219-8359eb29e329?w=400',
+    uploaded_by: 'The Crew',
+  },
+];
+
 export default function GalleryScreen(props) {
   const insets = useSafeAreaInsets();
   const { session, isOwner } = useApp();
+  const isPreview = session?.is_preview;
 
   const resolvedEventId =
     props.eventId ?? props.route?.params?.eventId ?? session?.event_id ?? undefined;
@@ -69,6 +94,13 @@ export default function GalleryScreen(props) {
   const videoRefs = useRef([]);
 
   const loadMedia = useCallback(async () => {
+    if (isPreview) {
+      setMedia(previewMedia);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     if (!resolvedEventId) return;
 
     try {
@@ -82,7 +114,7 @@ export default function GalleryScreen(props) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [resolvedEventId]);
+  }, [resolvedEventId, isPreview]);
 
   useEffect(() => {
     if (!resolvedEventId) {
@@ -111,6 +143,11 @@ export default function GalleryScreen(props) {
   };
 
   const uploadMedia = async (asset) => {
+    if (isPreview) {
+      Alert.alert('Preview Mode', 'Create an event to add your own photos and videos.');
+      return;
+    }
+
     if (!resolvedEventId) return;
 
     setUploading(true);

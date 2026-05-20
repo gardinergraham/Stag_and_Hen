@@ -2,8 +2,25 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, SafeAreaView } from 'react-native';
 import { colors, typography, spacing } from '../theme';
 import { Button } from '../components';
+import { useApp } from '../context/AppContext';
 
 const WelcomeScreen = ({ navigation }) => {
+  const { login } = useApp();
+
+  const handlePreview = async () => {
+    await login({
+      event_id: 'preview-event',
+      event_name: 'Preview Party Weekend',
+      event_type: 'hen',
+      member_name: 'Guest Preview',
+      role: 'preview',
+      is_preview: true,
+      event_tier: 'prime',
+      event_tier_price: 95,
+    });
+    navigation.replace('Main');
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -31,8 +48,15 @@ const WelcomeScreen = ({ navigation }) => {
           style={styles.button}
         />
         <Button
-          title="Join via QR Code"
+          title="Preview the App"
           variant="primary"
+          size="large"
+          onPress={handlePreview}
+          style={styles.button}
+        />
+        <Button
+          title="Join via QR Code"
+          variant="outline"
           size="large"
           onPress={() => navigation.navigate('ScanQR')}
           style={styles.button}
@@ -49,13 +73,6 @@ const WelcomeScreen = ({ navigation }) => {
           variant="secondary"
           size="medium"
           onPress={() => navigation.navigate('OwnerLogin')}
-          style={styles.ownerButton}
-        />
-        <Button
-          title="Admin Login"
-          variant="outline"
-          size="medium"
-          onPress={() => navigation.navigate('AdminLogin')}
           style={styles.ownerButton}
         />
       </View>

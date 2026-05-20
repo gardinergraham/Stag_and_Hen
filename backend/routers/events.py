@@ -27,7 +27,9 @@ async def create_event(event_input: EventCreate):
         event_end_date=event_input.event_end_date,
         description=event_input.description,
         owner_name=event_input.owner_name,
-        media_delete_policy=event_input.media_delete_policy
+        media_delete_policy=event_input.media_delete_policy,
+        event_tier=event_input.event_tier,
+        event_tier_price=event_input.event_tier_price,
     )
     
     # Create owner as first member

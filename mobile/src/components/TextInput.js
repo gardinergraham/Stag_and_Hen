@@ -16,6 +16,8 @@ const TextInput = ({
   style,
   inputStyle,
   maxLength,
+  returnKeyType,
+  onSubmitEditing,
 }) => {
   return (
     <View style={[styles.container, style]}>
@@ -37,6 +39,8 @@ const TextInput = ({
         multiline={multiline}
         numberOfLines={numberOfLines}
         maxLength={maxLength}
+        returnKeyType={returnKeyType}
+        onSubmitEditing={onSubmitEditing}
       />
       {error && <Text style={styles.errorText}>{error}</Text>}
     </View>

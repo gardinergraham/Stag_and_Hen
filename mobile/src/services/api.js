@@ -61,15 +61,6 @@ export const shopApi = {
     const url = category ? `/shop/items?category=${category}` : '/shop/items';
     return api.get(url);
   },
-  createItem: (data, eventId, ownerPin, adminUsername, adminPassword) =>
-    api.post('/shop/items', data, {
-      params: {
-        event_id: eventId,
-        owner_pin: ownerPin,
-        admin_username: adminUsername,
-        admin_password: adminPassword,
-      },
-    }),
   getCategories: () => api.get('/shop/categories'),
   trackClick: (itemId, memberName, eventId) =>
     api.post(`/shop/track-click/${itemId}`, null, {
@@ -78,6 +69,7 @@ export const shopApi = {
         event_id: eventId,
       },
     }),
+  createRequest: (data) => api.post('/shop-requests/', data),
 };
 
 // Kitty API

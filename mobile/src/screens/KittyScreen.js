@@ -8,6 +8,10 @@ import {
   RefreshControl,
   Alert,
   Modal,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { colors, typography, spacing } from '../theme';
 import { Card, Button, TextInput } from '../components';
@@ -16,18 +20,60 @@ import { useApp } from '../context/AppContext';
 
 const KittyScreen = () => {
   const { session, isOwner } = useApp();
+  const isPreview = session?.is_preview;
   const [balance, setBalance] = useState(0);
   const [transactions, setTransactions] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [showContribute, setShowContribute] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
-  const [amount, setAmount] = useState('');
+  const [contributionAmount, setContributionAmount] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState('');
   const [message, setMessage] = useState('');
   const [purpose, setPurpose] = useState('');
   const [ownerPin, setOwnerPin] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const parseAmount = (value) => Number.parseFloat(String(value).replace(',', '.'));
+
+  const resetContributeForm = () => {
+    Keyboard.dismiss();
+    setShowContribute(false);
+    setContributionAmount('');
+    setMessage('');
+  };
+
+  const resetWithdrawForm = () => {
+    Keyboard.dismiss();
+    setShowWithdraw(false);
+    setWithdrawAmount('');
+    setPurpose('');
+    setOwnerPin('');
+  };
+
   const loadData = async () => {
+    if (isPreview) {
+      setBalance(185);
+      setTransactions([
+        {
+          id: 'preview-tx-1',
+          transaction_type: 'contribution',
+          amount: 50,
+          contributor_name: 'Maid of Honour',
+          message: 'First round is covered',
+          created_at: new Date().toISOString(),
+        },
+        {
+          id: 'preview-tx-2',
+          transaction_type: 'contribution',
+          amount: 135,
+          contributor_name: 'The Crew',
+          message: 'Activity fund',
+          created_at: new Date(Date.now() - 3600000).toISOString(),
+        },
+      ]);
+      return;
+    }
+
     try {
       const [balanceRes, transactionsRes] = await Promise.all([
         kittyApi.getBalance(session.event_id),
@@ -51,8 +97,14 @@ const KittyScreen = () => {
   }, []);
 
   const handleContribute = async () => {
-    const numAmount = parseFloat(amount);
-    if (!numAmount || numAmount <= 0) {
+    Keyboard.dismiss();
+    if (isPreview) {
+      Alert.alert('Preview Mode', 'Create an event to collect real kitty contributions.');
+      return;
+    }
+
+    const numAmount = parseAmount(contributionAmount);
+    if (!Number.isFinite(numAmount) || numAmount <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid amount.');
       return;
     }
@@ -65,9 +117,7 @@ const KittyScreen = () => {
         amount: numAmount,
         message: message || null,
       });
-      setShowContribute(false);
-      setAmount('');
-      setMessage('');
+      resetContributeForm();
       await loadData();
       Alert.alert('Thank You!', `£${numAmount.toFixed(2)} added to the kitty!`);
     } catch (error) {
@@ -78,8 +128,14 @@ const KittyScreen = () => {
   };
 
   const handleWithdraw = async () => {
-    const numAmount = parseFloat(amount);
-    if (!numAmount || numAmount <= 0) {
+    Keyboard.dismiss();
+    if (isPreview) {
+      Alert.alert('Preview Mode', 'Create an event to withdraw from the kitty.');
+      return;
+    }
+
+    const numAmount = parseAmount(withdrawAmount);
+    if (!Number.isFinite(numAmount) || numAmount <= 0) {
       Alert.alert('Invalid Amount', 'Please enter a valid amount.');
       return;
     }
@@ -100,10 +156,7 @@ const KittyScreen = () => {
         amount: numAmount,
         purpose,
       });
-      setShowWithdraw(false);
-      setAmount('');
-      setPurpose('');
-      setOwnerPin('');
+      resetWithdrawForm();
       await loadData();
       Alert.alert('Withdrawn', `£${numAmount.toFixed(2)} withdrawn for: ${purpose}`);
     } catch (error) {
@@ -215,94 +268,132 @@ const KittyScreen = () => {
 
       {/* Contribute Modal */}
       <Modal visible={showContribute} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add to Kitty</Text>
-            <TextInput
-              label="Amount (£)"
-              placeholder="e.g., 20"
-              value={amount}
-              onChangeText={setAmount}
-              keyboardType="decimal-pad"
-            />
-            <TextInput
-              label="Message (Optional)"
-              placeholder="For the drinks!"
-              value={message}
-              onChangeText={setMessage}
-            />
-            <View style={styles.modalActions}>
-              <Button
-                title="Cancel"
-                variant="outline"
-                onPress={() => {
-                  setShowContribute(false);
-                  setAmount('');
-                  setMessage('');
-                }}
-                style={styles.modalButton}
-              />
-              <Button
-                title="Contribute"
-                variant="gold"
-                loading={loading}
-                onPress={handleContribute}
-                style={styles.modalButton}
-              />
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <View style={styles.modalTouchArea}>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.modalScrollContent}
+              >
+                <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>Add to Kitty</Text>
+                  <TextInput
+                    label="Amount (£)"
+                    placeholder="e.g., 20"
+                    value={contributionAmount}
+                    onChangeText={setContributionAmount}
+                    keyboardType="decimal-pad"
+                  />
+                  <Button
+                    title="Done"
+                    variant="outline"
+                    size="small"
+                    onPress={Keyboard.dismiss}
+                    style={styles.doneButton}
+                  />
+                  <TextInput
+                    label="Message (Optional)"
+                    placeholder="For the drinks!"
+                    value={message}
+                    onChangeText={setMessage}
+                    returnKeyType="done"
+                    onSubmitEditing={Keyboard.dismiss}
+                  />
+                  <View style={styles.modalActions}>
+                    <Button
+                      title="Cancel"
+                      variant="outline"
+                      onPress={resetContributeForm}
+                      style={styles.modalButton}
+                    />
+                    <Button
+                      title="Contribute"
+                      variant="gold"
+                      loading={loading}
+                      onPress={handleContribute}
+                      style={styles.modalButton}
+                    />
+                  </View>
+                </View>
+              </ScrollView>
             </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Withdraw Modal */}
       <Modal visible={showWithdraw} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Withdraw from Kitty</Text>
-            <TextInput
-              label="Amount (£)"
-              placeholder="e.g., 50"
-              value={amount}
-              onChangeText={setAmount}
-              keyboardType="decimal-pad"
-            />
-            <TextInput
-              label="What's it for?"
-              placeholder="e.g., Round of drinks"
-              value={purpose}
-              onChangeText={setPurpose}
-            />
-            <TextInput
-              label="Owner PIN"
-              placeholder="Your 4-digit PIN"
-              value={ownerPin}
-              onChangeText={setOwnerPin}
-              keyboardType="number-pad"
-              maxLength={4}
-              secureTextEntry
-            />
-            <View style={styles.modalActions}>
-              <Button
-                title="Cancel"
-                variant="outline"
-                onPress={() => {
-                  setShowWithdraw(false);
-                  setAmount('');
-                  setPurpose('');
-                  setOwnerPin('');
-                }}
-                style={styles.modalButton}
-              />
-              <Button
-                title="Withdraw"
-                variant="primary"
-                loading={loading}
-                onPress={handleWithdraw}
-                style={styles.modalButton}
-              />
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <View style={styles.modalTouchArea}>
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.modalScrollContent}
+              >
+                <View style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>Withdraw from Kitty</Text>
+                  <TextInput
+                    label="Amount (£)"
+                    placeholder="e.g., 50"
+                    value={withdrawAmount}
+                    onChangeText={setWithdrawAmount}
+                    keyboardType="decimal-pad"
+                  />
+                  <Button
+                    title="Done"
+                    variant="outline"
+                    size="small"
+                    onPress={Keyboard.dismiss}
+                    style={styles.doneButton}
+                  />
+                  <TextInput
+                    label="What's it for?"
+                    placeholder="e.g., Round of drinks"
+                    value={purpose}
+                    onChangeText={setPurpose}
+                    returnKeyType="done"
+                    onSubmitEditing={Keyboard.dismiss}
+                  />
+                  <TextInput
+                    label="Owner PIN"
+                    placeholder="Your 4-digit PIN"
+                    value={ownerPin}
+                    onChangeText={(value) => {
+                      setOwnerPin(value);
+                      if (value.length >= 4) {
+                        Keyboard.dismiss();
+                      }
+                    }}
+                    keyboardType="number-pad"
+                    maxLength={4}
+                    secureTextEntry
+                  />
+                  <View style={styles.modalActions}>
+                    <Button
+                      title="Cancel"
+                      variant="outline"
+                      onPress={resetWithdrawForm}
+                      style={styles.modalButton}
+                    />
+                    <Button
+                      title="Withdraw"
+                      variant="primary"
+                      loading={loading}
+                      onPress={handleWithdraw}
+                      style={styles.modalButton}
+                    />
+                  </View>
+                </View>
+              </ScrollView>
             </View>
-          </View>
-        </View>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -429,6 +520,12 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.8)',
+  },
+  modalTouchArea: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
     justifyContent: 'flex-end',
   },
   modalContent: {
@@ -447,6 +544,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.md,
     marginTop: spacing.md,
+  },
+  doneButton: {
+    alignSelf: 'flex-end',
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
   },
   modalButton: {
     flex: 1,

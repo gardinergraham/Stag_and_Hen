@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   View,
   Text,
   StyleSheet,
@@ -12,10 +14,11 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
 import { colors, typography, spacing, getEventTheme } from '../theme';
 import { Button, Card, TextInput } from '../components';
 import { useApp } from '../context/AppContext';
-import { daresApi } from '../services/api';
+import { daresApi, eventsApi } from '../services/api';
 
 const dareDecks = {
   warmup: [
@@ -51,17 +54,68 @@ const categories = [
   { id: 'drinks', title: 'Drinks', icon: 'beer' },
 ];
 
+const spinnerPairs = [
+  {
+    id: 'drink-safe',
+    title: 'Drink or Safe',
+    left: 'Drink',
+    right: 'Safe',
+    leftDetail: 'Take two sips or nominate someone to save you.',
+    rightDetail: 'You are safe this round.',
+    leftColor: '#00B7FF',
+    rightColor: '#22C55E',
+  },
+  {
+    id: 'blue-red',
+    title: 'Find Blue or Red',
+    left: 'Find Blue',
+    right: 'Find Red',
+    leftDetail: 'Find something blue and get photo proof.',
+    rightDetail: 'Find something red and get photo proof.',
+    leftColor: '#00B7FF',
+    rightColor: '#EF4444',
+  },
+  {
+    id: 'truth-photo',
+    title: 'Truth or Photo',
+    left: 'Truth',
+    right: 'Photo',
+    leftDetail: 'Answer a question from the group.',
+    rightDetail: 'Do a quick photo challenge for the gallery.',
+    leftColor: '#FFD700',
+    rightColor: '#FF1493',
+  },
+  {
+    id: 'solo-group',
+    title: 'Solo or Group',
+    left: 'Solo',
+    right: 'Group',
+    leftDetail: 'Do the next dare yourself.',
+    rightDetail: 'Choose two people to join you.',
+    leftColor: '#8B5CF6',
+    rightColor: '#0D9488',
+  },
+];
+
 const DaresScreen = ({ navigation }) => {
   const { session, isOwner } = useApp();
   const theme = getEventTheme(session?.event_type);
   const [selectedCategory, setSelectedCategory] = useState('warmup');
   const [customDares, setCustomDares] = useState([]);
+  const [customSpinnerPairs, setCustomSpinnerPairs] = useState([]);
   const [currentDare, setCurrentDare] = useState({ text: dareDecks.warmup[0], category: 'warmup', source: 'built-in' });
   const [completed, setCompleted] = useState([]);
   const [manageVisible, setManageVisible] = useState(false);
   const [newDareText, setNewDareText] = useState('');
   const [newDareCategory, setNewDareCategory] = useState('warmup');
   const [savingDare, setSavingDare] = useState(false);
+  const [members, setMembers] = useState([]);
+  const [guestOfHonour, setGuestOfHonour] = useState('');
+  const [selectedPairId, setSelectedPairId] = useState('drink-safe');
+  const [spinnerResult, setSpinnerResult] = useState(null);
+  const [spinning, setSpinning] = useState(false);
+  const wheelRotation = useRef(new Animated.Value(0)).current;
+  const spinCount = useRef(0);
 
   const loadCustomDares = async () => {
     if (session?.is_preview || !session?.event_id) return;
@@ -73,9 +127,105 @@ const DaresScreen = ({ navigation }) => {
     }
   };
 
+  const loadCustomSpinnerPairs = async () => {
+    if (session?.is_preview || !session?.event_id) return;
+    try {
+      const response = await daresApi.getSpinnerPairs(session.event_id, session.event_type);
+      setCustomSpinnerPairs(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log('Could not load spinner choices:', error?.response?.data || error.message);
+    }
+  };
+
+  const loadSpinTargets = async () => {
+    if (session?.is_preview) {
+      setGuestOfHonour(session?.event_type === 'stag' ? 'The Groom' : 'The Bride');
+      setMembers([
+        { id: 'preview-owner', name: 'Graham', role: 'owner' },
+        { id: 'preview-1', name: 'Best Mate', role: 'crew' },
+        { id: 'preview-2', name: 'Maid of Honour', role: 'crew' },
+      ]);
+      return;
+    }
+
+    if (!session?.event_id) return;
+
+    try {
+      const [eventResponse, membersResponse] = await Promise.all([
+        eventsApi.getById(session.event_id),
+        eventsApi.getMembers(session.event_id),
+      ]);
+      setGuestOfHonour(eventResponse.data?.bride_groom_name || '');
+      setMembers(Array.isArray(membersResponse.data) ? membersResponse.data : []);
+    } catch (error) {
+      console.log('Could not load spin targets:', error?.response?.data || error.message);
+    }
+  };
+
   useEffect(() => {
     loadCustomDares();
+    loadCustomSpinnerPairs();
+    loadSpinTargets();
   }, [session?.event_id, session?.event_type]);
+
+  const availableSpinnerPairs = [
+    ...spinnerPairs,
+    ...customSpinnerPairs.map((pair) => ({
+      id: pair.id,
+      title: pair.title,
+      left: pair.left,
+      right: pair.right,
+      leftDetail: pair.left_detail || '',
+      rightDetail: pair.right_detail || '',
+      leftColor: pair.left_color || theme.accent,
+      rightColor: pair.right_color || colors.success,
+      source: pair.event_id ? 'owner' : 'admin',
+    })),
+  ];
+  const selectedPair = availableSpinnerPairs.find((pair) => pair.id === selectedPairId) || availableSpinnerPairs[0];
+  const spinTargets = [
+    ...members.map((member) => ({
+      id: member.id || member.name,
+      name: member.name,
+      label: member.role === 'owner' ? 'Owner' : 'Crew',
+    })),
+    ...(guestOfHonour
+      ? [{ id: 'guest-of-honour', name: guestOfHonour, label: session?.event_type === 'stag' ? 'Groom' : 'Bride' }]
+      : []),
+  ].filter((target) => target.name);
+
+  const spinCrewWheel = () => {
+    if (spinning) return;
+
+    const targets = spinTargets.length
+      ? spinTargets
+      : [{ id: 'current-user', name: session?.member_name || 'Someone', label: 'Crew' }];
+    const target = targets[Math.floor(Math.random() * targets.length)];
+    const side = Math.random() >= 0.5 ? 'bottom' : 'top';
+    const action = side === 'bottom' ? selectedPair.right : selectedPair.left;
+    const detail = side === 'bottom' ? selectedPair.rightDetail : selectedPair.leftDetail;
+    const baseRotation = side === 'bottom' ? 180 : 0;
+    const landingOffset = Math.floor(Math.random() * 70) - 35;
+
+    spinCount.current += 1;
+    setSpinning(true);
+    setSpinnerResult(null);
+
+    Animated.timing(wheelRotation, {
+      toValue: spinCount.current * 360 * 4 + baseRotation + landingOffset,
+      duration: 1600,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      setSpinnerResult({ target, action, detail, side });
+      setSpinning(false);
+    });
+  };
+
+  const wheelRotate = wheelRotation.interpolate({
+    inputRange: [0, 360],
+    outputRange: ['0deg', '360deg'],
+  });
 
   const spinDare = (categoryId = selectedCategory) => {
     const deck = [
@@ -157,6 +307,91 @@ const DaresScreen = ({ navigation }) => {
           </View>
           <Text style={styles.heroIcon}>{session?.event_type === 'stag' ? '🍻' : '💃'}</Text>
         </View>
+
+        <Card style={[styles.spinnerCard, { borderColor: `${theme.accent}66` }]}>
+          <Card.Content style={styles.spinnerContent}>
+            <View style={styles.spinnerHeader}>
+              <View>
+                <Text style={[styles.dareLabel, { color: theme.accent }]}>Spin the Crew</Text>
+                <Text style={styles.spinnerTitle}>{selectedPair.title}</Text>
+              </View>
+              <Ionicons name="navigate" size={24} color={theme.accent} />
+            </View>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+              {availableSpinnerPairs.map((pair) => {
+                const active = selectedPairId === pair.id;
+                return (
+                  <TouchableOpacity
+                    key={pair.id}
+                    style={[
+                      styles.categoryChip,
+                      active && {
+                        borderColor: theme.accent,
+                        backgroundColor: `${theme.accent}22`,
+                      },
+                    ]}
+                    onPress={() => {
+                      setSelectedPairId(pair.id);
+                      setSpinnerResult(null);
+                    }}
+                  >
+                    <Text style={[styles.categoryText, active && { color: theme.accent }]}>
+                      {pair.title}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.wheelStage}>
+              <View style={styles.wheelPointer} />
+              <Animated.View style={[styles.wheelFrame, { transform: [{ rotate: wheelRotate }] }]}>
+                <Svg width={170} height={170} viewBox="0 0 170 170">
+                  <Path
+                    d="M 5 85 A 80 80 0 0 1 165 85 L 5 85 Z"
+                    fill={selectedPair.leftColor}
+                    stroke="rgba(255,255,255,0.6)"
+                    strokeWidth="2"
+                  />
+                  <Path
+                    d="M 5 85 A 80 80 0 0 0 165 85 L 5 85 Z"
+                    fill={selectedPair.rightColor}
+                    stroke="rgba(0,0,0,0.25)"
+                    strokeWidth="2"
+                  />
+                </Svg>
+                <View pointerEvents="none" style={styles.wheelLabelTop}>
+                  <Text style={styles.wheelText}>{selectedPair.left}</Text>
+                </View>
+                <View pointerEvents="none" style={styles.wheelLabelBottom}>
+                  <Text style={styles.wheelText}>{selectedPair.right}</Text>
+                </View>
+              </Animated.View>
+            </View>
+
+            {spinnerResult ? (
+              <View style={styles.spinnerResult}>
+                <Text style={styles.spinnerPerson}>{spinnerResult.target.name}</Text>
+                <Text style={[styles.spinnerAction, { color: theme.accent }]}>{spinnerResult.action}</Text>
+                <Text style={styles.spinnerDetail}>{spinnerResult.detail}</Text>
+                <Text style={styles.spinnerRole}>{spinnerResult.target.label}</Text>
+              </View>
+            ) : (
+              <Text style={styles.spinnerHint}>
+                Spin to pick a person and decide which side of the challenge they land on.
+              </Text>
+            )}
+
+            <Button
+              title={spinning ? 'Spinning...' : 'Spin'}
+              variant="primary"
+              color={theme.accent}
+              loading={spinning}
+              onPress={spinCrewWheel}
+            />
+          </Card.Content>
+        </Card>
 
         <ScrollView
           horizontal
@@ -401,6 +636,104 @@ const styles = StyleSheet.create({
   },
   dareCard: {
     marginBottom: spacing.lg,
+  },
+  spinnerCard: {
+    marginBottom: spacing.lg,
+  },
+  spinnerContent: {
+    padding: spacing.lg,
+  },
+  spinnerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  spinnerTitle: {
+    ...typography.h2,
+    color: colors.text,
+  },
+  wheelStage: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: spacing.lg,
+  },
+  wheelPointer: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 14,
+    borderRightWidth: 14,
+    borderTopWidth: 24,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: colors.text,
+    marginBottom: -2,
+    zIndex: 2,
+  },
+  wheelFrame: {
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 4,
+    borderColor: colors.text,
+  },
+  wheelText: {
+    ...typography.button,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  wheelLabelTop: {
+    position: 'absolute',
+    top: 34,
+    left: 18,
+    right: 18,
+    alignItems: 'center',
+  },
+  wheelLabelBottom: {
+    position: 'absolute',
+    bottom: 34,
+    left: 18,
+    right: 18,
+    alignItems: 'center',
+  },
+  spinnerHint: {
+    ...typography.bodySmall,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
+  spinnerResult: {
+    alignItems: 'center',
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  spinnerPerson: {
+    ...typography.h2,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  spinnerAction: {
+    ...typography.h3,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  spinnerDetail: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
+  spinnerRole: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    marginTop: spacing.sm,
   },
   dareContent: {
     padding: spacing.lg,

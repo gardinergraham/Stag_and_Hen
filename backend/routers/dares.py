@@ -4,7 +4,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from datetime import datetime
 
-from models.dare import Dare, DareCreate
+from models.dare import Dare, DareCreate, SpinnerPair, SpinnerPairCreate
 
 router = APIRouter(prefix="/dares", tags=["dares"])
 
@@ -30,6 +30,12 @@ def normalize_dare(dare):
     if isinstance(dare.get("created_at"), str):
         dare["created_at"] = datetime.fromisoformat(dare["created_at"].replace("Z", "+00:00"))
     return dare
+
+
+def normalize_spinner_pair(pair):
+    if isinstance(pair.get("created_at"), str):
+        pair["created_at"] = datetime.fromisoformat(pair["created_at"].replace("Z", "+00:00"))
+    return pair
 
 
 @router.get("/", response_model=List[Dare])
@@ -81,6 +87,111 @@ async def create_dare(
     dare_doc["created_at"] = dare_doc["created_at"].isoformat()
     await db.dares.insert_one(dare_doc)
     return dare
+
+
+@router.get("/spinner-pairs", response_model=List[SpinnerPair])
+async def get_spinner_pairs(
+    event_id: Optional[str] = None,
+    event_type: Optional[str] = None,
+    include_event: bool = True,
+):
+    query = {"is_active": True}
+    scope_filters = [{"event_id": None}]
+
+    if include_event and event_id:
+        scope_filters.append({"event_id": event_id})
+
+    query["$or"] = scope_filters
+
+    if event_type in ("stag", "hen"):
+        query["event_type"] = {"$in": ["all", event_type]}
+
+    pairs = await db.spinner_pairs.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [normalize_spinner_pair(pair) for pair in pairs]
+
+
+@router.post("/spinner-pairs", response_model=SpinnerPair)
+async def create_spinner_pair(
+    pair_input: SpinnerPairCreate,
+    owner_pin: Optional[str] = None,
+    admin_username: Optional[str] = None,
+    admin_password: Optional[str] = None,
+):
+    admin = is_global_admin(admin_username, admin_password)
+    if pair_input.event_id:
+        if not admin:
+            await verify_event_owner(pair_input.event_id, owner_pin)
+        created_by = "admin" if admin else "owner"
+    else:
+        if not admin:
+            raise HTTPException(status_code=403, detail="Only admins can create global spinner choices")
+        created_by = "admin"
+
+    pair = SpinnerPair(
+        title=pair_input.title,
+        left=pair_input.left,
+        right=pair_input.right,
+        left_detail=pair_input.left_detail,
+        right_detail=pair_input.right_detail,
+        left_color=pair_input.left_color,
+        right_color=pair_input.right_color,
+        event_type=pair_input.event_type,
+        event_id=pair_input.event_id,
+        created_by=created_by,
+    )
+    pair_doc = pair.model_dump()
+    pair_doc["created_at"] = pair_doc["created_at"].isoformat()
+    await db.spinner_pairs.insert_one(pair_doc)
+    return pair
+
+
+@router.put("/spinner-pairs/{pair_id}", response_model=SpinnerPair)
+async def update_spinner_pair(
+    pair_id: str,
+    pair_input: SpinnerPairCreate,
+    owner_pin: Optional[str] = None,
+    admin_username: Optional[str] = None,
+    admin_password: Optional[str] = None,
+):
+    existing = await db.spinner_pairs.find_one({"id": pair_id, "is_active": True})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Spinner choice not found")
+
+    admin = is_global_admin(admin_username, admin_password)
+    if existing.get("event_id") and not admin:
+        await verify_event_owner(existing.get("event_id"), owner_pin)
+    elif not admin:
+        raise HTTPException(status_code=403, detail="Only admins can edit global spinner choices")
+
+    update_data = pair_input.model_dump()
+    if not admin:
+        update_data["event_id"] = existing.get("event_id")
+        update_data["event_type"] = existing.get("event_type", "all")
+
+    await db.spinner_pairs.update_one({"id": pair_id}, {"$set": update_data})
+    updated = await db.spinner_pairs.find_one({"id": pair_id}, {"_id": 0})
+    return normalize_spinner_pair(updated)
+
+
+@router.delete("/spinner-pairs/{pair_id}")
+async def delete_spinner_pair(
+    pair_id: str,
+    owner_pin: Optional[str] = None,
+    admin_username: Optional[str] = None,
+    admin_password: Optional[str] = None,
+):
+    existing = await db.spinner_pairs.find_one({"id": pair_id, "is_active": True})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Spinner choice not found")
+
+    admin = is_global_admin(admin_username, admin_password)
+    if existing.get("event_id") and not admin:
+        await verify_event_owner(existing.get("event_id"), owner_pin)
+    elif not admin:
+        raise HTTPException(status_code=403, detail="Only admins can delete global spinner choices")
+
+    await db.spinner_pairs.update_one({"id": pair_id}, {"$set": {"is_active": False}})
+    return {"message": "Spinner choice deleted successfully"}
 
 
 @router.put("/{dare_id}", response_model=Dare)

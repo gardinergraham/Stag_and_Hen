@@ -64,20 +64,20 @@ const MainTabs = () => {
         }}
       />
       <Tab.Screen
-        name="Shop"
-        component={ShopScreen}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon icon={theme.shopIcon} label="Shop" focused={focused} activeColor={theme.accent} />
-          ),
-        }}
-      />
-      <Tab.Screen
         name="Dares"
         component={DaresScreen}
         options={{
           tabBarIcon: ({ focused }) => (
             <TabIcon icon="🎯" label="Dares" focused={focused} activeColor={theme.accent} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Shop"
+        component={ShopScreen}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon icon={theme.shopIcon} label="Shop" focused={focused} activeColor={theme.accent} />
           ),
         }}
       />

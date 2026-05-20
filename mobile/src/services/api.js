@@ -81,6 +81,13 @@ export const daresApi = {
         event_type: eventType,
       },
     }),
+  getSpinnerPairs: (eventId, eventType) =>
+    api.get('/dares/spinner-pairs', {
+      params: {
+        event_id: eventId,
+        event_type: eventType,
+      },
+    }),
   create: (data, ownerPin) =>
     api.post('/dares/', data, {
       params: {

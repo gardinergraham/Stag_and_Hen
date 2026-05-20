@@ -26,3 +26,33 @@ class Dare(BaseModel):
     created_by: Literal["admin", "owner"] = "admin"
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class SpinnerPairCreate(BaseModel):
+    title: str = Field(..., min_length=3, max_length=80)
+    left: str = Field(..., min_length=1, max_length=40)
+    right: str = Field(..., min_length=1, max_length=40)
+    left_detail: Optional[str] = Field(default=None, max_length=180)
+    right_detail: Optional[str] = Field(default=None, max_length=180)
+    left_color: str = Field(default="#00B7FF", max_length=20)
+    right_color: str = Field(default="#22C55E", max_length=20)
+    event_type: DareEventType = Field(default="all")
+    event_id: Optional[str] = None
+
+
+class SpinnerPair(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    left: str
+    right: str
+    left_detail: Optional[str] = None
+    right_detail: Optional[str] = None
+    left_color: str = "#00B7FF"
+    right_color: str = "#22C55E"
+    event_type: DareEventType = "all"
+    event_id: Optional[str] = None
+    created_by: Literal["admin", "owner"] = "admin"
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

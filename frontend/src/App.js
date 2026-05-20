@@ -20,6 +20,16 @@ const emptyDareForm = {
   category: "warmup",
   event_type: "all",
 };
+const emptySpinnerPairForm = {
+  title: "",
+  left: "",
+  right: "",
+  left_detail: "",
+  right_detail: "",
+  left_color: "#00B7FF",
+  right_color: "#22C55E",
+  event_type: "all",
+};
 const dareCategories = [
   { id: "warmup", name: "Warm Up" },
   { id: "photo", name: "Photo Dare" },
@@ -294,6 +304,9 @@ const AdminPage = () => {
   const [dares, setDares] = useState([]);
   const [dareForm, setDareForm] = useState(emptyDareForm);
   const [selectedDare, setSelectedDare] = useState(null);
+  const [spinnerPairs, setSpinnerPairs] = useState([]);
+  const [spinnerPairForm, setSpinnerPairForm] = useState(emptySpinnerPairForm);
+  const [selectedSpinnerPair, setSelectedSpinnerPair] = useState(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -303,7 +316,7 @@ const AdminPage = () => {
     setLoading(true);
     setError("");
     try {
-      const [itemsRes, categoriesRes, requestsRes, daresRes] = await Promise.all([
+      const [itemsRes, categoriesRes, requestsRes, daresRes, spinnerPairsRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/shop/items`),
         axios.get(`${API_BASE_URL}/shop/categories`),
         axios.get(`${API_BASE_URL}/shop-requests/`, {
@@ -317,11 +330,17 @@ const AdminPage = () => {
             include_event: false,
           },
         }),
+        axios.get(`${API_BASE_URL}/dares/spinner-pairs`, {
+          params: {
+            include_event: false,
+          },
+        }),
       ]);
       setItems(itemsRes.data);
       setCategories(categoriesRes.data.categories);
       setRequests(requestsRes.data);
       setDares(daresRes.data);
+      setSpinnerPairs(spinnerPairsRes.data);
     } catch (err) {
       setError(err.response?.data?.detail || "Could not load admin data.");
     } finally {
@@ -341,6 +360,10 @@ const AdminPage = () => {
 
   const updateDareForm = (key, value) => {
     setDareForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const updateSpinnerPairForm = (key, value) => {
+    setSpinnerPairForm((current) => ({ ...current, [key]: value }));
   };
 
   const getAdminParams = () => ({
@@ -363,12 +386,35 @@ const AdminPage = () => {
     setStatus("");
   };
 
+  const resetSpinnerPairForm = () => {
+    setSelectedSpinnerPair(null);
+    setSpinnerPairForm(emptySpinnerPairForm);
+    setError("");
+    setStatus("");
+  };
+
   const selectDare = (dare) => {
     setSelectedDare(dare);
     setDareForm({
       text: dare.text || "",
       category: dare.category || "warmup",
       event_type: dare.event_type || "all",
+    });
+    setError("");
+    setStatus("");
+  };
+
+  const selectSpinnerPair = (pair) => {
+    setSelectedSpinnerPair(pair);
+    setSpinnerPairForm({
+      title: pair.title || "",
+      left: pair.left || "",
+      right: pair.right || "",
+      left_detail: pair.left_detail || "",
+      right_detail: pair.right_detail || "",
+      left_color: pair.left_color || "#00B7FF",
+      right_color: pair.right_color || "#22C55E",
+      event_type: pair.event_type || "all",
     });
     setError("");
     setStatus("");
@@ -590,6 +636,78 @@ const AdminPage = () => {
       await loadShopData();
     } catch (err) {
       setError(err.response?.data?.detail || "Could not delete this dare.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSpinnerPairSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setStatus("");
+
+    if (!spinnerPairForm.title.trim() || !spinnerPairForm.left.trim() || !spinnerPairForm.right.trim()) {
+      setError("Please add a title and both spinner choices.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        title: spinnerPairForm.title.trim(),
+        left: spinnerPairForm.left.trim(),
+        right: spinnerPairForm.right.trim(),
+        left_detail: spinnerPairForm.left_detail.trim() || null,
+        right_detail: spinnerPairForm.right_detail.trim() || null,
+        left_color: spinnerPairForm.left_color.trim() || "#00B7FF",
+        right_color: spinnerPairForm.right_color.trim() || "#22C55E",
+        event_type: spinnerPairForm.event_type,
+        event_id: null,
+      };
+
+      if (selectedSpinnerPair) {
+        await axios.put(`${API_BASE_URL}/dares/spinner-pairs/${selectedSpinnerPair.id}`, payload, {
+          params: getAdminParams(),
+        });
+        setStatus("Spinner choice updated.");
+      } else {
+        await axios.post(`${API_BASE_URL}/dares/spinner-pairs`, payload, {
+          params: getAdminParams(),
+        });
+        setStatus("Spinner choice added to the app.");
+      }
+
+      setSelectedSpinnerPair(null);
+      setSpinnerPairForm(emptySpinnerPairForm);
+      await loadShopData();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Could not save this spinner choice.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSpinnerPairDelete = async (pair) => {
+    const confirmed = window.confirm(`Delete this spinner choice?\n\n"${pair.title}"`);
+    if (!confirmed) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      await axios.delete(`${API_BASE_URL}/dares/spinner-pairs/${pair.id}`, {
+        params: getAdminParams(),
+      });
+      if (selectedSpinnerPair?.id === pair.id) {
+        setSelectedSpinnerPair(null);
+        setSpinnerPairForm(emptySpinnerPairForm);
+      }
+      setStatus("Spinner choice deleted.");
+      await loadShopData();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Could not delete this spinner choice.");
     } finally {
       setSaving(false);
     }
@@ -888,6 +1006,141 @@ const AdminPage = () => {
                   </button>
                   <div className="admin-product-actions">
                     <button type="button" onClick={() => handleDareDelete(dare)} aria-label="Delete dare">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </aside>
+      </section>
+
+      <section className="admin-layout admin-dares-section">
+        <form className="admin-card admin-form" onSubmit={handleSpinnerPairSubmit}>
+          <div className="admin-card-header">
+            {selectedSpinnerPair ? <Save size={20} /> : <Plus size={20} />}
+            <div>
+              <p>{selectedSpinnerPair ? "Editing Spinner" : "New Spinner"}</p>
+              <h1>{selectedSpinnerPair ? "Update Two Choices" : "Add Two Choices"}</h1>
+            </div>
+          </div>
+
+          <label>
+            Spinner Title
+            <input
+              value={spinnerPairForm.title}
+              onChange={(event) => updateSpinnerPairForm("title", event.target.value)}
+              placeholder="e.g., Drink or Safe"
+            />
+          </label>
+
+          <div className="admin-form-grid">
+            <label>
+              Choice One
+              <input
+                value={spinnerPairForm.left}
+                onChange={(event) => updateSpinnerPairForm("left", event.target.value)}
+                placeholder="Drink"
+              />
+            </label>
+            <label>
+              Choice Two
+              <input
+                value={spinnerPairForm.right}
+                onChange={(event) => updateSpinnerPairForm("right", event.target.value)}
+                placeholder="Safe"
+              />
+            </label>
+          </div>
+
+          <div className="admin-form-grid">
+            <label>
+              Choice One Detail
+              <input
+                value={spinnerPairForm.left_detail}
+                onChange={(event) => updateSpinnerPairForm("left_detail", event.target.value)}
+                placeholder="Take two sips."
+              />
+            </label>
+            <label>
+              Choice Two Detail
+              <input
+                value={spinnerPairForm.right_detail}
+                onChange={(event) => updateSpinnerPairForm("right_detail", event.target.value)}
+                placeholder="You are safe this round."
+              />
+            </label>
+          </div>
+
+          <div className="admin-form-grid">
+            <label>
+              Choice One Colour
+              <input
+                type="color"
+                value={spinnerPairForm.left_color}
+                onChange={(event) => updateSpinnerPairForm("left_color", event.target.value)}
+              />
+            </label>
+            <label>
+              Choice Two Colour
+              <input
+                type="color"
+                value={spinnerPairForm.right_color}
+                onChange={(event) => updateSpinnerPairForm("right_color", event.target.value)}
+              />
+            </label>
+          </div>
+
+          <label>
+            Event Type
+            <select
+              value={spinnerPairForm.event_type}
+              onChange={(event) => updateSpinnerPairForm("event_type", event.target.value)}
+            >
+              <option value="all">All</option>
+              <option value="stag">Stag</option>
+              <option value="hen">Hen</option>
+            </select>
+          </label>
+
+          <div className="admin-form-actions">
+            <button className="btn btn-primary admin-submit" type="submit" disabled={saving}>
+              {selectedSpinnerPair ? <Save size={18} /> : <Plus size={18} />}
+              {saving ? "Saving" : selectedSpinnerPair ? "Update Choices" : "Add Choices"}
+            </button>
+            {selectedSpinnerPair && (
+              <button className="btn btn-secondary admin-submit" type="button" onClick={resetSpinnerPairForm}>
+                <X size={18} />
+                Cancel Edit
+              </button>
+            )}
+          </div>
+        </form>
+
+        <aside className="admin-card admin-preview">
+          <div className="admin-card-header">
+            <ClipboardList size={20} />
+            <div>
+              <p>Spinner Choices</p>
+              <h2>{spinnerPairs.length} Pairs</h2>
+            </div>
+          </div>
+          <div className="admin-product-list admin-dare-list">
+            {spinnerPairs.length === 0 ? (
+              <p className="admin-empty-text">No spinner choices have been added yet.</p>
+            ) : (
+              spinnerPairs.map((pair) => (
+                <article
+                  className={`admin-product-row ${selectedSpinnerPair?.id === pair.id ? "admin-product-row-selected" : ""}`}
+                  key={pair.id}
+                >
+                  <button className="admin-request-main" type="button" onClick={() => selectSpinnerPair(pair)}>
+                    <h3>{pair.title}</h3>
+                    <p>{pair.left} / {pair.right} · {pair.event_type}</p>
+                  </button>
+                  <div className="admin-product-actions">
+                    <button type="button" onClick={() => handleSpinnerPairDelete(pair)} aria-label="Delete spinner choice">
                       <Trash2 size={16} />
                     </button>
                   </div>

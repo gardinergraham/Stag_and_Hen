@@ -78,6 +78,8 @@ const ScanQRScreen = ({ navigation }) => {
         event_id: data.event_id,
         event_name: data.event_name,
         event_type: data.event_type,
+        event_date: data.event_date,
+        event_end_date: data.event_end_date,
         member_name: data.member_name,
         role: data.role,
       });

@@ -31,6 +31,8 @@ class AccessResponse(BaseModel):
     event_id: str
     event_name: str
     event_type: str
+    event_date: Optional[datetime] = None
+    event_end_date: Optional[datetime] = None
     member_name: str
     role: str
     message: str
@@ -76,6 +78,8 @@ async def access_via_qr(request: QRAccessRequest):
         event_id=event['id'],
         event_name=event['event_name'],
         event_type=event['event_type'],
+        event_date=event.get('event_date'),
+        event_end_date=event.get('event_end_date'),
         member_name=request.name,
         role=role,
         message=f"Welcome to {event['event_name']}!"
@@ -120,6 +124,8 @@ async def access_via_manual(request: MemberAccess):
         event_id=event['id'],
         event_name=event['event_name'],
         event_type=event['event_type'],
+        event_date=event.get('event_date'),
+        event_end_date=event.get('event_end_date'),
         member_name=request.name,
         role=role,
         message=f"Welcome to {event['event_name']}!"
@@ -143,6 +149,8 @@ async def owner_login(request: OwnerLoginRequest):
         event_id=event['id'],
         event_name=event['event_name'],
         event_type=event['event_type'],
+        event_date=event.get('event_date'),
+        event_end_date=event.get('event_end_date'),
         member_name=event['owner_name'],
         role="owner",
         message=f"Welcome back, {event['owner_name']}!",

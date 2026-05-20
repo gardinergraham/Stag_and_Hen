@@ -15,15 +15,25 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 
-def calculate_delete_at(policy: str) -> datetime | None:
+def normalize_datetime(value) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return None
+
+
+def calculate_delete_at(policy: str, event_end_date=None) -> datetime | None:
     """Calculate delete_at timestamp based on policy"""
-    now = datetime.now(timezone.utc)
+    base_date = normalize_datetime(event_end_date) or datetime.now(timezone.utc)
     if policy == "1_day":
-        return now + timedelta(days=1)
+        return base_date + timedelta(days=1)
     elif policy == "1_week":
-        return now + timedelta(weeks=1)
+        return base_date + timedelta(weeks=1)
     elif policy == "1_month":
-        return now + timedelta(days=30)
+        return base_date + timedelta(days=30)
     return None  # "never"
 
 
@@ -45,7 +55,7 @@ async def upload_media(media_input: MediaCreate):
         raise HTTPException(status_code=403, detail="You are not a member of this event")
     
     # Calculate delete_at based on event's policy
-    delete_at = calculate_delete_at(event['media_delete_policy'])
+    delete_at = calculate_delete_at(event['media_delete_policy'], event.get('event_end_date'))
     
     media = Media(
         event_id=media_input.event_id,

@@ -12,10 +12,12 @@ import { colors, typography, spacing } from '../theme';
 import { Card, Button } from '../components';
 import { eventsApi } from '../services/api';
 import { useApp } from '../context/AppContext';
+import { formatEventDateRange } from '../utils/eventDates';
 
 const ShareQRScreen = () => {
   const { session } = useApp();
   const [qrData, setQrData] = useState(null);
+  const [eventDetails, setEventDetails] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,8 +34,12 @@ const ShareQRScreen = () => {
         return;
       }
       
-      const response = await eventsApi.getQRCode(session.event_id, ownerPin);
-      setQrData(response.data);
+      const [qrResponse, eventResponse] = await Promise.all([
+        eventsApi.getQRCode(session.event_id, ownerPin),
+        eventsApi.getById(session.event_id),
+      ]);
+      setQrData(qrResponse.data);
+      setEventDetails(eventResponse.data);
     } catch (error) {
       console.error('Failed to load QR:', error);
       Alert.alert('Error', 'Failed to generate QR code');
@@ -44,8 +50,9 @@ const ShareQRScreen = () => {
 
   const handleShare = async () => {
     try {
+      const eventDate = formatEventDateRange(eventDetails?.event_date, eventDetails?.event_end_date);
       await Share.share({
-        message: `Join ${session.event_name}!\n\nEvent: ${session.event_name}\nAccess PIN: ${qrData?.access_pin}\n\nDownload The Stag & Hen app and enter the details above to join the party!`,
+        message: `You're invited to ${session.event_name}!\n\nDates: ${eventDate}\nAccess PIN: ${qrData?.access_pin}\n\nDownload The Stag & Hen app, scan the QR code or enter the event name and PIN to join the party.`,
         title: 'Join my Stag/Hen Party!',
       });
     } catch (error) {
@@ -73,6 +80,11 @@ const ShareQRScreen = () => {
 
         <Card variant="glow" style={styles.qrCard}>
           <Card.Content style={styles.qrContent}>
+            <Text style={styles.inviteEyebrow}>You are invited to</Text>
+            <Text style={styles.eventName}>{session.event_name}</Text>
+            <Text style={styles.inviteDate}>
+              {formatEventDateRange(eventDetails?.event_date, eventDetails?.event_end_date)}
+            </Text>
             {qrData?.qr_data && (
               <View style={styles.qrWrapper}>
                 <QRCode
@@ -83,7 +95,7 @@ const ShareQRScreen = () => {
                 />
               </View>
             )}
-            <Text style={styles.eventName}>{session.event_name}</Text>
+            <Text style={styles.scanHint}>Scan to join the crew</Text>
           </Card.Content>
         </Card>
 
@@ -144,15 +156,33 @@ const styles = StyleSheet.create({
   qrContent: {
     alignItems: 'center',
   },
+  inviteEyebrow: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
+  },
   qrWrapper: {
     padding: spacing.md,
     backgroundColor: colors.text,
     borderRadius: 16,
     marginBottom: spacing.md,
+    marginTop: spacing.lg,
   },
   eventName: {
     ...typography.h3,
     color: colors.gold,
+    textAlign: 'center',
+  },
+  inviteDate: {
+    ...typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  scanHint: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
     textAlign: 'center',
   },
   pinCard: {

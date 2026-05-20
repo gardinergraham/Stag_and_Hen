@@ -14,9 +14,10 @@ import { colors, typography, spacing, shadows } from '../theme';
 import { Card, Button } from '../components';
 import { eventsApi, kittyApi } from '../services/api';
 import { useApp } from '../context/AppContext';
+import { formatEventDateRange, getCountdownLabel, getCountdownParts } from '../utils/eventDates';
 
 const HomeScreen = ({ navigation }) => {
-  const { session, isOwner, logout } = useApp();
+  const { session, isOwner, logout, updateSession } = useApp();
   const isPreview = session?.is_preview;
   const [refreshing, setRefreshing] = useState(false);
   const [event, setEvent] = useState(null);
@@ -28,6 +29,9 @@ const HomeScreen = ({ navigation }) => {
       setEvent({
         event_name: session.event_name,
         event_type: session.event_type,
+        event_date: session.event_date || new Date(Date.now() + 1000 * 60 * 60 * 24 * 42).toISOString(),
+        event_end_date: session.event_end_date || new Date(Date.now() + 1000 * 60 * 60 * 24 * 44).toISOString(),
+        event_tier: session.event_tier,
       });
       setKittyBalance(185);
       setMembers([
@@ -46,6 +50,12 @@ const HomeScreen = ({ navigation }) => {
         eventsApi.getMembers(session.event_id),
       ]);
       setEvent(eventRes.data);
+      if (eventRes.data?.event_date && eventRes.data.event_date !== session.event_date) {
+        await updateSession({
+          event_date: eventRes.data.event_date,
+          event_end_date: eventRes.data.event_end_date,
+        });
+      }
       setKittyBalance(kittyRes.data.balance);
       setMembers(membersRes.data);
     } catch (error) {
@@ -78,6 +88,9 @@ const HomeScreen = ({ navigation }) => {
   };
 
   const isStag = session.event_type === 'stag';
+  const eventDate = event?.event_date || session.event_date;
+  const eventEndDate = event?.event_end_date || session.event_end_date;
+  const countdown = getCountdownParts(eventDate);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -122,6 +135,31 @@ const HomeScreen = ({ navigation }) => {
                 }}
                 style={styles.previewButton}
               />
+            )}
+          </Card.Content>
+        </Card>
+
+        <Card style={styles.countdownCard}>
+          <Card.Content>
+            <View style={styles.countdownHeader}>
+              <View>
+                <Text style={styles.countdownLabel}>Countdown</Text>
+                <Text style={styles.countdownTitle}>{getCountdownLabel(eventDate)}</Text>
+              </View>
+              <Text style={styles.countdownIcon}>⏳</Text>
+            </View>
+            <Text style={styles.countdownDate}>{formatEventDateRange(eventDate, eventEndDate)}</Text>
+            {countdown && !countdown.isPast && (
+              <View style={styles.countdownPills}>
+                <View style={styles.countdownPill}>
+                  <Text style={styles.countdownPillValue}>{countdown.days}</Text>
+                  <Text style={styles.countdownPillLabel}>Days</Text>
+                </View>
+                <View style={styles.countdownPill}>
+                  <Text style={styles.countdownPillValue}>{countdown.hours}</Text>
+                  <Text style={styles.countdownPillLabel}>Hours</Text>
+                </View>
+              </View>
             )}
           </Card.Content>
         </Card>
@@ -256,6 +294,58 @@ const styles = StyleSheet.create({
   previewButton: {
     marginTop: spacing.md,
     alignSelf: 'flex-start',
+  },
+  countdownCard: {
+    marginBottom: spacing.lg,
+    borderColor: colors.borderLight,
+    borderWidth: 1,
+  },
+  countdownHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  countdownLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+  },
+  countdownTitle: {
+    ...typography.h2,
+    color: colors.gold,
+    marginTop: spacing.xs,
+  },
+  countdownIcon: {
+    fontSize: 30,
+  },
+  countdownDate: {
+    ...typography.body,
+    color: colors.textSecondary,
+    marginTop: spacing.sm,
+  },
+  countdownPills: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  countdownPill: {
+    flex: 1,
+    backgroundColor: `${colors.gold}12`,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: `${colors.gold}35`,
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  countdownPillValue: {
+    ...typography.h2,
+    color: colors.gold,
+  },
+  countdownPillLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
   },
   statsBlock: {
     gap: spacing.md,

@@ -12,33 +12,27 @@ import {
   RefreshControl,
   Modal,
   ScrollView,
+  Share,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
 import { Video, ResizeMode } from 'expo-av';
 import ViewShot from 'react-native-view-shot';
 
-import {
-  Sepia,
-  Grayscale,
-  Polaroid,
-  Vintage,
-  Kodachrome,
-} from 'react-native-color-matrix-image-filters';
-
 import api from '../services/api';
 import { useApp } from '../context/AppContext';
+import { getEventMediaWindows } from '../utils/eventDates';
 
 const { width } = Dimensions.get('window');
 
 const colourFilters = [
-  { name: 'original', component: null },
-  { name: 'sepia', component: Sepia },
-  { name: 'bw', component: Grayscale },
-  { name: 'polaroid', component: Polaroid },
-  { name: 'vintage', component: Vintage },
-  { name: 'kodachrome', component: Kodachrome },
+  { name: 'original', label: 'Original', style: {} },
+  { name: 'soft', label: 'Soft', style: { opacity: 0.9 } },
+  { name: 'bright', label: 'Bright', style: { opacity: 1 } },
+  { name: 'moody', label: 'Moody', style: { opacity: 0.72 } },
+  { name: 'party', label: 'Party', style: { borderColor: '#e94560', borderWidth: 4 } },
 ];
 
 const previewMedia = [
@@ -77,6 +71,7 @@ export default function GalleryScreen(props) {
   const headerTitle = props.headerTitle ?? 'Gallery';
 
   const [media, setMedia] = useState([]);
+  const [eventDetails, setEventDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -96,6 +91,11 @@ export default function GalleryScreen(props) {
   const loadMedia = useCallback(async () => {
     if (isPreview) {
       setMedia(previewMedia);
+      setEventDetails({
+        event_date: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+        event_end_date: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
+        event_tier: 'prime',
+      });
       setLoading(false);
       setRefreshing(false);
       return;
@@ -105,8 +105,12 @@ export default function GalleryScreen(props) {
 
     try {
       setLoading(true);
-      const response = await api.get(`/media/event/${resolvedEventId}`);
-      setMedia(Array.isArray(response.data) ? response.data : []);
+      const [mediaResponse, eventResponse] = await Promise.all([
+        api.get(`/media/event/${resolvedEventId}`),
+        api.get(`/events/${resolvedEventId}`),
+      ]);
+      setMedia(Array.isArray(mediaResponse.data) ? mediaResponse.data : []);
+      setEventDetails(eventResponse.data);
     } catch (err) {
       console.error('Failed to load media:', err);
       Alert.alert('Error', 'Failed to load gallery.');
@@ -142,6 +146,28 @@ export default function GalleryScreen(props) {
     await loadMedia();
   };
 
+  const mediaWindows = getEventMediaWindows({
+    event_date: eventDetails?.event_date || session?.event_date,
+    event_end_date: eventDetails?.event_end_date || session?.event_end_date,
+    event_tier: eventDetails?.event_tier || session?.event_tier,
+  });
+
+  const ensureUploadsOpen = () => {
+    if (isOwner) return true;
+    if (mediaWindows.uploadsOpen) return true;
+
+    Alert.alert('Uploads Closed', mediaWindows.uploadStatus);
+    return false;
+  };
+
+  const ensureDownloadsOpen = () => {
+    if (isOwner) return true;
+    if (mediaWindows.downloadsOpen) return true;
+
+    Alert.alert('Downloads Locked', mediaWindows.downloadStatus);
+    return false;
+  };
+
   const uploadMedia = async (asset) => {
     if (isPreview) {
       Alert.alert('Preview Mode', 'Create an event to add your own photos and videos.');
@@ -149,6 +175,7 @@ export default function GalleryScreen(props) {
     }
 
     if (!resolvedEventId) return;
+    if (!ensureUploadsOpen()) return;
 
     setUploading(true);
     try {
@@ -212,6 +239,7 @@ export default function GalleryScreen(props) {
 
   const pickMedia = async () => {
   try {
+    if (!ensureUploadsOpen()) return;
     console.log('pickMedia pressed');
 
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -232,6 +260,8 @@ export default function GalleryScreen(props) {
 };
 
   const takeMedia = async () => {
+    if (!ensureUploadsOpen()) return;
+
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Camera permission is required.');
@@ -273,48 +303,80 @@ export default function GalleryScreen(props) {
     ]);
   };
 
-  const saveFilteredImage = async () => {
-    try {
-      const uri = await viewShotRef.current?.capture();
-      if (!uri) return;
+  const handleShareMedia = async () => {
+    const currentMedia = media[selectedIndex];
+    if (!currentMedia) return;
 
-      await uploadMedia({
-        uri,
-        type: 'image',
-        fileName: `filtered_${Date.now()}.jpg`,
-        mimeType: 'image/jpeg',
+    if (isPreview) {
+      Alert.alert('Preview Mode', 'Create an event to share real gallery media.');
+      return;
+    }
+
+    try {
+      await Share.share({
+        title: `${session?.event_name || 'The Stag & Hen'} memory`,
+        message: `A memory from ${session?.event_name || 'The Stag & Hen'}: ${currentMedia.file_url}`,
+        url: currentMedia.file_url,
       });
-    } catch (err) {
-      console.error('Capture failed:', err);
-      Alert.alert('Error', 'Failed to save filtered image.');
+    } catch (error) {
+      console.error('Share media failed:', error);
+      Alert.alert('Share Failed', 'Could not share this media.');
     }
   };
 
- const applyFilter = (uri, filterName) => {
-  const filter = colourFilters.find((f) => f.name === filterName);
+  const handleSaveMedia = async () => {
+    const currentMedia = media[selectedIndex];
+    if (!currentMedia) return;
 
-  const image = (
-    <Image
-      source={{ uri }}
-      style={styles.filteredImage}
-      resizeMode="contain"
-    />
-  );
+    if (isPreview) {
+      Alert.alert('Preview Mode', 'Create an event to save real gallery media.');
+      return;
+    }
 
-  if (!filter || !filter.component) {
-    return <View style={styles.filteredContainer}>{image}</View>;
-  }
+    if (!ensureDownloadsOpen()) return;
 
-  const FilterComponent = filter.component;
+    if (currentMedia.media_type !== 'image') {
+      Alert.alert('Coming Soon', 'Video downloads will be part of the full gallery export.');
+      return;
+    }
 
-  return (
-    <View style={styles.filteredContainer}>
-      <FilterComponent>
-        {image}
-      </FilterComponent>
-    </View>
-  );
-};
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Needed', 'Photo library permission is required to save media.');
+        return;
+      }
+
+      const uri = await viewShotRef.current?.capture();
+      if (!uri) {
+        Alert.alert('Save Failed', 'Could not capture this image.');
+        return;
+      }
+
+      await MediaLibrary.saveToLibraryAsync(uri);
+      Alert.alert('Saved', 'This photo has been saved to your library.');
+    } catch (error) {
+      console.error('Save media failed:', error);
+      Alert.alert('Save Failed', 'Could not save this media.');
+    }
+  };
+
+  const applyFilter = (uri, filterName) => {
+    const filter = colourFilters.find((f) => f.name === filterName) || colourFilters[0];
+
+    return (
+      <View style={styles.filteredContainer}>
+        <Image
+          source={{ uri }}
+          style={[styles.filteredImage, filter.style]}
+          resizeMode="contain"
+        />
+        {filterName === 'moody' && <View pointerEvents="none" style={styles.moodyOverlay} />}
+        {filterName === 'soft' && <View pointerEvents="none" style={styles.softOverlay} />}
+        {filterName === 'party' && <View pointerEvents="none" style={styles.partyOverlay} />}
+      </View>
+    );
+  };
 
   const renderMediaItem = ({ item, index }) => {
     const isVideo = item.media_type === 'video';
@@ -398,6 +460,30 @@ export default function GalleryScreen(props) {
             </View>
           ) : (
             <FlatList
+              ListHeaderComponent={
+                <View style={styles.windowBanner}>
+                  <View style={styles.windowBannerRow}>
+                    <Ionicons
+                      name={mediaWindows.uploadsOpen || isOwner ? 'cloud-upload' : 'lock-closed'}
+                      size={18}
+                      color="#FFD700"
+                    />
+                    <Text style={styles.windowBannerText}>
+                      {isOwner ? 'Owner upload access is open' : mediaWindows.uploadStatus}
+                    </Text>
+                  </View>
+                  <View style={styles.windowBannerRow}>
+                    <Ionicons
+                      name={mediaWindows.downloadsOpen || isOwner ? 'download' : 'time'}
+                      size={18}
+                      color="#8FAF7A"
+                    />
+                    <Text style={styles.windowBannerText}>
+                      {isOwner ? 'Owner downloads are available' : mediaWindows.downloadStatus}
+                    </Text>
+                  </View>
+                </View>
+              }
               data={media}
               renderItem={renderMediaItem}
               keyExtractor={(item) => item.id}
@@ -441,18 +527,32 @@ export default function GalleryScreen(props) {
                   <Ionicons name="arrow-back" size={30} color="white" />
                 </TouchableOpacity>
 
-                {media[selectedIndex]?.media_type === 'image' && (
+                <View style={styles.fullscreenActions}>
+                  {media[selectedIndex]?.media_type === 'image' && (
+                    <TouchableOpacity
+                      style={styles.fullscreenActionButton}
+                      onPress={() => setFiltersVisible(!filtersVisible)}
+                    >
+                      <Ionicons
+                        name={filtersVisible ? 'close-circle' : 'color-filter'}
+                        size={26}
+                        color="white"
+                      />
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
-                    style={styles.filterToggle}
-                    onPress={() => setFiltersVisible(!filtersVisible)}
+                    style={styles.fullscreenActionButton}
+                    onPress={handleShareMedia}
                   >
-                    <Ionicons
-                      name={filtersVisible ? 'close-circle' : 'color-filter'}
-                      size={28}
-                      color="white"
-                    />
+                    <Ionicons name="share-social" size={25} color="white" />
                   </TouchableOpacity>
-                )}
+                  <TouchableOpacity
+                    style={styles.fullscreenActionButton}
+                    onPress={handleSaveMedia}
+                  >
+                    <Ionicons name="download" size={25} color="white" />
+                  </TouchableOpacity>
+                </View>
 
                 <ScrollView
                   horizontal
@@ -494,7 +594,6 @@ export default function GalleryScreen(props) {
                   <View style={[styles.filterBar, { bottom: insets.bottom + 20 }]}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                       {colourFilters.map((filter) => {
-                        const FilterComponent = filter.component;
                         const previewUri = media[selectedIndex]?.file_url;
 
                         return (
@@ -504,31 +603,25 @@ export default function GalleryScreen(props) {
                             style={styles.filterItem}
                           >
                             <View style={styles.filterPreview}>
-                              {typeof FilterComponent === 'function' ? (
-                                <FilterComponent>
-                                  {previewUri && (
-                                    <Image
-                                      source={{ uri: previewUri }}
-                                      style={styles.previewImage}
-                                    />
-                                  )}
-                                </FilterComponent>
-                              ) : (
-                                previewUri && (
+                              {previewUri && (
+                                <>
                                   <Image
                                     source={{ uri: previewUri }}
-                                    style={styles.previewImage}
+                                    style={[styles.previewImage, filter.style]}
                                   />
-                                )
+                                  {filter.name === 'moody' && <View pointerEvents="none" style={styles.previewMoodyOverlay} />}
+                                  {filter.name === 'soft' && <View pointerEvents="none" style={styles.previewSoftOverlay} />}
+                                  {filter.name === 'party' && <View pointerEvents="none" style={styles.previewPartyOverlay} />}
+                                </>
                               )}
                             </View>
-                            <Text style={styles.filterLabel}>{filter.name}</Text>
+                            <Text style={styles.filterLabel}>{filter.label}</Text>
                           </TouchableOpacity>
                         );
                       })}
                     </ScrollView>
 
-                    <TouchableOpacity style={styles.saveButton} onPress={saveFilteredImage}>
+                    <TouchableOpacity style={styles.saveButton} onPress={handleSaveMedia}>
                       <Ionicons name="download" size={26} color="white" />
                     </TouchableOpacity>
                   </View>
@@ -540,8 +633,11 @@ export default function GalleryScreen(props) {
           <View style={[styles.bottomActionsContainer, { paddingBottom: insets.bottom + 12 }]}>
             <View style={styles.topActionRow}>
               <TouchableOpacity
-                style={[styles.actionButton, uploading && styles.actionButtonDisabled]}
-                disabled={uploading}
+                style={[
+                  styles.actionButton,
+                  (uploading || (!mediaWindows.uploadsOpen && !isOwner)) && styles.actionButtonDisabled,
+                ]}
+                disabled={uploading || (!mediaWindows.uploadsOpen && !isOwner)}
                 onPress={takeMedia}
               >
                 <Ionicons name="camera" size={22} color="white" />
@@ -551,8 +647,11 @@ export default function GalleryScreen(props) {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.actionButton, uploading && styles.actionButtonDisabled]}
-                disabled={uploading}
+                style={[
+                  styles.actionButton,
+                  (uploading || (!mediaWindows.uploadsOpen && !isOwner)) && styles.actionButtonDisabled,
+                ]}
+                disabled={uploading || (!mediaWindows.uploadsOpen && !isOwner)}
                 onPress={pickMedia}
               >
                 <Ionicons name="image" size={22} color="white" />
@@ -591,6 +690,26 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorText: { color: '#ff6b6b', fontSize: 16 },
   thumbnailGrid: { paddingHorizontal: 8, paddingVertical: 12 },
+  windowBanner: {
+    marginHorizontal: 4,
+    marginBottom: 10,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#1a1a2e',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    gap: 8,
+  },
+  windowBannerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  windowBannerText: {
+    color: 'rgba(255,255,255,0.86)',
+    fontSize: 13,
+    flex: 1,
+  },
   thumbnailContainer: {
     flex: 1,
     margin: 4,
@@ -696,10 +815,25 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 8,
     overflow: 'hidden',
+    backgroundColor: '#111',
   },
   previewImage: {
     width: '100%',
     height: '100%',
+  },
+  previewMoodyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 15, 35, 0.34)',
+  },
+  previewSoftOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 210, 230, 0.18)',
+  },
+  previewPartyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 3,
+    borderColor: '#e94560',
+    backgroundColor: 'rgba(233, 69, 96, 0.12)',
   },
   filterLabel: {
     color: 'white',
@@ -715,11 +849,14 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     elevation: 4,
   },
-  filterToggle: {
+  fullscreenActions: {
     position: 'absolute',
     top: 50,
     right: 20,
     zIndex: 10,
+    gap: 10,
+  },
+  fullscreenActionButton: {
     backgroundColor: 'rgba(0,0,0,0.4)',
     padding: 10,
     borderRadius: 25,
@@ -746,14 +883,28 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   filteredContainer: {
-  width: width,
-  height: '100%',
-  justifyContent: 'center',
-  alignItems: 'center',
-  backgroundColor: 'black',
-},
-filteredImage: {
-  width: width,
-  height: '100%',
-},
+    width: width,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'black',
+  },
+  filteredImage: {
+    width: width,
+    height: '100%',
+  },
+  moodyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 15, 35, 0.34)',
+  },
+  softOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 210, 230, 0.18)',
+  },
+  partyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderWidth: 8,
+    borderColor: '#e94560',
+    backgroundColor: 'rgba(233, 69, 96, 0.08)',
+  },
 });

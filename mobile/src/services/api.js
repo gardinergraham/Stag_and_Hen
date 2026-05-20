@@ -88,6 +88,20 @@ export const daresApi = {
         event_type: eventType,
       },
     }),
+  createSpinnerPair: (data, ownerPin) =>
+    api.post('/dares/spinner-pairs', data, {
+      params: {
+        owner_pin: ownerPin,
+      },
+    }),
+  deleteSpinnerPair: (pairId, ownerPin) =>
+    api.delete(`/dares/spinner-pairs/${pairId}`, {
+      params: {
+        owner_pin: ownerPin,
+      },
+    }),
+  getSpinResults: (eventId) => api.get(`/dares/spin-results/${eventId}`),
+  createSpinResult: (data) => api.post('/dares/spin-results', data),
   create: (data, ownerPin) =>
     api.post('/dares/', data, {
       params: {

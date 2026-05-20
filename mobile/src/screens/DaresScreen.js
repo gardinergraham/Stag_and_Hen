@@ -109,10 +109,17 @@ const DaresScreen = ({ navigation }) => {
   const [newDareText, setNewDareText] = useState('');
   const [newDareCategory, setNewDareCategory] = useState('warmup');
   const [savingDare, setSavingDare] = useState(false);
+  const [newPairTitle, setNewPairTitle] = useState('');
+  const [newPairLeft, setNewPairLeft] = useState('');
+  const [newPairRight, setNewPairRight] = useState('');
+  const [newPairLeftDetail, setNewPairLeftDetail] = useState('');
+  const [newPairRightDetail, setNewPairRightDetail] = useState('');
+  const [savingPair, setSavingPair] = useState(false);
   const [members, setMembers] = useState([]);
   const [guestOfHonour, setGuestOfHonour] = useState('');
   const [selectedPairId, setSelectedPairId] = useState('drink-safe');
   const [spinnerResult, setSpinnerResult] = useState(null);
+  const [recentSpinResults, setRecentSpinResults] = useState([]);
   const [spinning, setSpinning] = useState(false);
   const wheelRotation = useRef(new Animated.Value(0)).current;
   const spinCount = useRef(0);
@@ -162,11 +169,29 @@ const DaresScreen = ({ navigation }) => {
     }
   };
 
+  const loadRecentSpinResults = async () => {
+    if (session?.is_preview || !session?.event_id) return;
+    try {
+      const response = await daresApi.getSpinResults(session.event_id);
+      setRecentSpinResults(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log('Could not load shared spin results:', error?.response?.data || error.message);
+    }
+  };
+
   useEffect(() => {
     loadCustomDares();
     loadCustomSpinnerPairs();
     loadSpinTargets();
+    loadRecentSpinResults();
   }, [session?.event_id, session?.event_type]);
+
+  useEffect(() => {
+    if (session?.is_preview || !session?.event_id) return undefined;
+
+    const interval = setInterval(loadRecentSpinResults, 8000);
+    return () => clearInterval(interval);
+  }, [session?.event_id, session?.is_preview]);
 
   const availableSpinnerPairs = [
     ...spinnerPairs,
@@ -216,9 +241,28 @@ const DaresScreen = ({ navigation }) => {
       duration: 1600,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
-    }).start(() => {
-      setSpinnerResult({ target, action, detail, side });
+    }).start(async () => {
+      const result = { target, action, detail, side, spinnerTitle: selectedPair.title };
+      setSpinnerResult(result);
       setSpinning(false);
+
+      if (session?.is_preview || !session?.event_id) return;
+
+      try {
+        const response = await daresApi.createSpinResult({
+          event_id: session.event_id,
+          spinner_title: selectedPair.title,
+          target_name: target.name,
+          target_label: target.label,
+          action,
+          detail,
+          spun_by: session?.member_name || (isOwner ? 'Owner' : 'Crew'),
+        });
+        const savedResult = response.data;
+        setRecentSpinResults((current) => [savedResult, ...current.filter((item) => item.id !== savedResult.id)].slice(0, 10));
+      } catch (error) {
+        console.log('Could not share spin result:', error?.response?.data || error.message);
+      }
     });
   };
 
@@ -226,6 +270,13 @@ const DaresScreen = ({ navigation }) => {
     inputRange: [0, 360],
     outputRange: ['0deg', '360deg'],
   });
+
+  const formatSpinTime = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   const spinDare = (categoryId = selectedCategory) => {
     const deck = [
@@ -288,6 +339,64 @@ const DaresScreen = ({ navigation }) => {
             await loadCustomDares();
           } catch (error) {
             Alert.alert('Error', error?.response?.data?.detail || 'Could not delete this dare.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const saveOwnerSpinnerPair = async () => {
+    if (!newPairTitle.trim() || !newPairLeft.trim() || !newPairRight.trim()) {
+      Alert.alert('Choices Needed', 'Add a title and both spinner choices first.');
+      return;
+    }
+
+    setSavingPair(true);
+    try {
+      await daresApi.createSpinnerPair(
+        {
+          title: newPairTitle.trim(),
+          left: newPairLeft.trim(),
+          right: newPairRight.trim(),
+          left_detail: newPairLeftDetail.trim() || null,
+          right_detail: newPairRightDetail.trim() || null,
+          left_color: theme.accent,
+          right_color: colors.success,
+          event_type: session?.event_type || 'all',
+          event_id: session?.event_id,
+        },
+        session?.owner_pin
+      );
+      setNewPairTitle('');
+      setNewPairLeft('');
+      setNewPairRight('');
+      setNewPairLeftDetail('');
+      setNewPairRightDetail('');
+      await loadCustomSpinnerPairs();
+      Alert.alert('Spinner Added', 'Your crew can now use this spinner choice.');
+    } catch (error) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Could not add this spinner choice.');
+    } finally {
+      setSavingPair(false);
+    }
+  };
+
+  const deleteOwnerSpinnerPair = async (pair) => {
+    Alert.alert('Delete Spinner Choice', `Remove "${pair.title}" from this event?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await daresApi.deleteSpinnerPair(pair.id, session?.owner_pin);
+            if (selectedPairId === pair.id) {
+              setSelectedPairId('drink-safe');
+              setSpinnerResult(null);
+            }
+            await loadCustomSpinnerPairs();
+          } catch (error) {
+            Alert.alert('Error', error?.response?.data?.detail || 'Could not delete this spinner choice.');
           }
         },
       },
@@ -393,6 +502,41 @@ const DaresScreen = ({ navigation }) => {
           </Card.Content>
         </Card>
 
+        <Card style={styles.sharedSpinCard}>
+          <Card.Content style={styles.sharedSpinContent}>
+            <View style={styles.sharedSpinHeader}>
+              <View>
+                <Text style={[styles.dareLabel, { color: theme.accent }]}>Shared Results</Text>
+                <Text style={styles.sharedSpinTitle}>Latest Spins</Text>
+              </View>
+              <TouchableOpacity onPress={loadRecentSpinResults}>
+                <Ionicons name="refresh" size={22} color={theme.accent} />
+              </TouchableOpacity>
+            </View>
+            {recentSpinResults.length === 0 ? (
+              <Text style={styles.spinnerHint}>Spin results from the crew will show here.</Text>
+            ) : (
+              recentSpinResults.slice(0, 5).map((result) => (
+                <View key={result.id} style={styles.sharedSpinRow}>
+                  <View style={styles.sharedSpinIcon}>
+                    <Ionicons name="navigate" size={16} color={theme.accent} />
+                  </View>
+                  <View style={styles.sharedSpinTextWrap}>
+                    <Text style={styles.sharedSpinText}>
+                      {result.target_name} got {result.action}
+                    </Text>
+                    <Text style={styles.sharedSpinMeta}>
+                      {result.spinner_title}
+                      {result.spun_by ? ` · spun by ${result.spun_by}` : ''}
+                      {formatSpinTime(result.created_at) ? ` · ${formatSpinTime(result.created_at)}` : ''}
+                    </Text>
+                  </View>
+                </View>
+              ))
+            )}
+          </Card.Content>
+        </Card>
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -464,7 +608,7 @@ const DaresScreen = ({ navigation }) => {
               onPress={() => setManageVisible(true)}
             >
               <Ionicons name="add-circle" size={20} color={theme.accent} />
-              <Text style={[styles.photoProofText, { color: theme.accent }]}>Add Owner Dares</Text>
+              <Text style={[styles.photoProofText, { color: theme.accent }]}>Manage Owner Games</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
@@ -504,12 +648,13 @@ const DaresScreen = ({ navigation }) => {
         >
           <View style={styles.modalPanel}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Owner Dares</Text>
+              <Text style={styles.modalTitle}>Owner Games</Text>
               <TouchableOpacity onPress={() => setManageVisible(false)}>
                 <Ionicons name="close" size={26} color={colors.text} />
               </TouchableOpacity>
             </View>
 
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <TextInput
               label="New Dare"
               placeholder="e.g., Get a photo with someone wearing blue"
@@ -563,6 +708,73 @@ const DaresScreen = ({ navigation }) => {
                     </View>
                   ))
               )}
+            </ScrollView>
+
+            <View style={styles.modalDivider} />
+
+            <Text style={styles.ownerSectionTitle}>Owner Spinner Choices</Text>
+            <TextInput
+              label="Spinner Title"
+              placeholder="e.g., Drink or Dare"
+              value={newPairTitle}
+              onChangeText={setNewPairTitle}
+            />
+            <View style={styles.pairInputRow}>
+              <TextInput
+                label="Choice One"
+                placeholder="Drink"
+                value={newPairLeft}
+                onChangeText={setNewPairLeft}
+                style={styles.pairInput}
+              />
+              <TextInput
+                label="Choice Two"
+                placeholder="Dare"
+                value={newPairRight}
+                onChangeText={setNewPairRight}
+                style={styles.pairInput}
+              />
+            </View>
+            <TextInput
+              label="Choice One Detail"
+              placeholder="e.g., Take two sips"
+              value={newPairLeftDetail}
+              onChangeText={setNewPairLeftDetail}
+            />
+            <TextInput
+              label="Choice Two Detail"
+              placeholder="e.g., Pick a dare card"
+              value={newPairRightDetail}
+              onChangeText={setNewPairRightDetail}
+            />
+            <Button
+              title="Add Spinner Choice"
+              variant="primary"
+              color={theme.accent}
+              loading={savingPair}
+              onPress={saveOwnerSpinnerPair}
+              style={styles.modalButton}
+            />
+
+            <ScrollView style={styles.ownerDareList}>
+              {customSpinnerPairs.filter((pair) => pair.event_id === session?.event_id).length === 0 ? (
+                <Text style={styles.emptyText}>No owner spinner choices yet.</Text>
+              ) : (
+                customSpinnerPairs
+                  .filter((pair) => pair.event_id === session?.event_id)
+                  .map((pair) => (
+                    <View key={pair.id} style={styles.ownerDareRow}>
+                      <View style={styles.ownerDareSummary}>
+                        <Text style={styles.ownerDareText}>{pair.title}</Text>
+                        <Text style={styles.ownerPairChoices}>{pair.left} / {pair.right}</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => deleteOwnerSpinnerPair(pair)}>
+                        <Ionicons name="trash-outline" size={20} color={colors.error} />
+                      </TouchableOpacity>
+                    </View>
+                  ))
+              )}
+            </ScrollView>
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -735,6 +947,52 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: spacing.sm,
   },
+  sharedSpinCard: {
+    marginBottom: spacing.lg,
+  },
+  sharedSpinContent: {
+    padding: spacing.lg,
+  },
+  sharedSpinHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  sharedSpinTitle: {
+    ...typography.h3,
+    color: colors.text,
+  },
+  sharedSpinRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  sharedSpinIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  sharedSpinTextWrap: {
+    flex: 1,
+  },
+  sharedSpinText: {
+    ...typography.bodySmall,
+    color: colors.text,
+    fontWeight: '700',
+  },
+  sharedSpinMeta: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+  },
   dareContent: {
     padding: spacing.lg,
   },
@@ -838,6 +1096,23 @@ const styles = StyleSheet.create({
   modalButton: {
     marginBottom: spacing.lg,
   },
+  modalDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.lg,
+  },
+  ownerSectionTitle: {
+    ...typography.h3,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  pairInputRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  pairInput: {
+    flex: 1,
+  },
   ownerDareList: {
     maxHeight: 220,
   },
@@ -854,6 +1129,14 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
     flex: 1,
+  },
+  ownerDareSummary: {
+    flex: 1,
+  },
+  ownerPairChoices: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
   },
 });
 

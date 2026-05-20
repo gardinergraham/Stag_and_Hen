@@ -4,7 +4,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from datetime import datetime
 
-from models.dare import Dare, DareCreate, SpinnerPair, SpinnerPairCreate
+from models.dare import Dare, DareCreate, SpinResult, SpinResultCreate, SpinnerPair, SpinnerPairCreate
 
 router = APIRouter(prefix="/dares", tags=["dares"])
 
@@ -36,6 +36,12 @@ def normalize_spinner_pair(pair):
     if isinstance(pair.get("created_at"), str):
         pair["created_at"] = datetime.fromisoformat(pair["created_at"].replace("Z", "+00:00"))
     return pair
+
+
+def normalize_spin_result(result):
+    if isinstance(result.get("created_at"), str):
+        result["created_at"] = datetime.fromisoformat(result["created_at"].replace("Z", "+00:00"))
+    return result
 
 
 @router.get("/", response_model=List[Dare])
@@ -192,6 +198,37 @@ async def delete_spinner_pair(
 
     await db.spinner_pairs.update_one({"id": pair_id}, {"$set": {"is_active": False}})
     return {"message": "Spinner choice deleted successfully"}
+
+
+@router.get("/spin-results/{event_id}", response_model=List[SpinResult])
+async def get_spin_results(event_id: str, limit: int = 10):
+    capped_limit = min(max(limit, 1), 30)
+    results = await db.spin_results.find(
+        {"event_id": event_id, "is_active": True},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(capped_limit)
+    return [normalize_spin_result(result) for result in results]
+
+
+@router.post("/spin-results", response_model=SpinResult)
+async def create_spin_result(result_input: SpinResultCreate):
+    event = await db.events.find_one({"id": result_input.event_id, "is_active": True})
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    result = SpinResult(
+        event_id=result_input.event_id,
+        spinner_title=result_input.spinner_title,
+        target_name=result_input.target_name,
+        target_label=result_input.target_label,
+        action=result_input.action,
+        detail=result_input.detail,
+        spun_by=result_input.spun_by,
+    )
+    result_doc = result.model_dump()
+    result_doc["created_at"] = result_doc["created_at"].isoformat()
+    await db.spin_results.insert_one(result_doc)
+    return result
 
 
 @router.put("/{dare_id}", response_model=Dare)

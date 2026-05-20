@@ -56,3 +56,28 @@ class SpinnerPair(BaseModel):
     created_by: Literal["admin", "owner"] = "admin"
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class SpinResultCreate(BaseModel):
+    event_id: str = Field(..., min_length=1)
+    spinner_title: str = Field(..., min_length=1, max_length=80)
+    target_name: str = Field(..., min_length=1, max_length=80)
+    target_label: Optional[str] = Field(default=None, max_length=40)
+    action: str = Field(..., min_length=1, max_length=80)
+    detail: Optional[str] = Field(default=None, max_length=180)
+    spun_by: Optional[str] = Field(default=None, max_length=80)
+
+
+class SpinResult(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    event_id: str
+    spinner_title: str
+    target_name: str
+    target_label: Optional[str] = None
+    action: str
+    detail: Optional[str] = None
+    spun_by: Optional[str] = None
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -15,6 +15,17 @@ const emptyShopForm = {
   image_url: "",
   category: "other",
 };
+const emptyDareForm = {
+  text: "",
+  category: "warmup",
+  event_type: "all",
+};
+const dareCategories = [
+  { id: "warmup", name: "Warm Up" },
+  { id: "photo", name: "Photo Dare" },
+  { id: "cheeky", name: "Cheeky" },
+  { id: "drinks", name: "Drinks" },
+];
 
 // Header Component
 const Header = () => (
@@ -280,6 +291,9 @@ const AdminPage = () => {
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
   const [requests, setRequests] = useState([]);
+  const [dares, setDares] = useState([]);
+  const [dareForm, setDareForm] = useState(emptyDareForm);
+  const [selectedDare, setSelectedDare] = useState(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -289,7 +303,7 @@ const AdminPage = () => {
     setLoading(true);
     setError("");
     try {
-      const [itemsRes, categoriesRes, requestsRes] = await Promise.all([
+      const [itemsRes, categoriesRes, requestsRes, daresRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/shop/items`),
         axios.get(`${API_BASE_URL}/shop/categories`),
         axios.get(`${API_BASE_URL}/shop-requests/`, {
@@ -298,12 +312,18 @@ const AdminPage = () => {
             ...getAdminParams(),
           },
         }),
+        axios.get(`${API_BASE_URL}/dares/`, {
+          params: {
+            include_event: false,
+          },
+        }),
       ]);
       setItems(itemsRes.data);
       setCategories(categoriesRes.data.categories);
       setRequests(requestsRes.data);
+      setDares(daresRes.data);
     } catch (err) {
-      setError(err.response?.data?.detail || "Could not load shop data.");
+      setError(err.response?.data?.detail || "Could not load admin data.");
     } finally {
       setLoading(false);
     }
@@ -319,6 +339,10 @@ const AdminPage = () => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
+  const updateDareForm = (key, value) => {
+    setDareForm((current) => ({ ...current, [key]: value }));
+  };
+
   const getAdminParams = () => ({
     admin_username: ADMIN_USERNAME,
     admin_password: ADMIN_PASSWORD,
@@ -328,6 +352,24 @@ const AdminPage = () => {
     setSelectedItem(null);
     setSelectedRequest(null);
     setForm(emptyShopForm);
+    setError("");
+    setStatus("");
+  };
+
+  const resetDareForm = () => {
+    setSelectedDare(null);
+    setDareForm(emptyDareForm);
+    setError("");
+    setStatus("");
+  };
+
+  const selectDare = (dare) => {
+    setSelectedDare(dare);
+    setDareForm({
+      text: dare.text || "",
+      category: dare.category || "warmup",
+      event_type: dare.event_type || "all",
+    });
     setError("");
     setStatus("");
   };
@@ -481,6 +523,73 @@ const AdminPage = () => {
       await loadShopData();
     } catch (err) {
       setError(err.response?.data?.detail || "Could not delete this product.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDareSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setStatus("");
+
+    if (!dareForm.text.trim()) {
+      setError("Please add the dare text.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        text: dareForm.text.trim(),
+        category: dareForm.category,
+        event_type: dareForm.event_type,
+        event_id: null,
+      };
+
+      if (selectedDare) {
+        await axios.put(`${API_BASE_URL}/dares/${selectedDare.id}`, payload, {
+          params: getAdminParams(),
+        });
+        setStatus("Dare updated.");
+      } else {
+        await axios.post(`${API_BASE_URL}/dares/`, payload, {
+          params: getAdminParams(),
+        });
+        setStatus("Dare added to the app.");
+      }
+
+      setSelectedDare(null);
+      setDareForm(emptyDareForm);
+      await loadShopData();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Could not save this dare.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDareDelete = async (dare) => {
+    const confirmed = window.confirm(`Delete this dare?\n\n"${dare.text}"`);
+    if (!confirmed) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      await axios.delete(`${API_BASE_URL}/dares/${dare.id}`, {
+        params: getAdminParams(),
+      });
+      if (selectedDare?.id === dare.id) {
+        setSelectedDare(null);
+        setDareForm(emptyDareForm);
+      }
+      setStatus("Dare deleted.");
+      await loadShopData();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Could not delete this dare.");
     } finally {
       setSaving(false);
     }
@@ -699,6 +808,92 @@ const AdminPage = () => {
                 </div>
               </article>
             ))}
+          </div>
+        </aside>
+      </section>
+
+      <section className="admin-layout admin-dares-section">
+        <form className="admin-card admin-form" onSubmit={handleDareSubmit}>
+          <div className="admin-card-header">
+            {selectedDare ? <Save size={20} /> : <Plus size={20} />}
+            <div>
+              <p>{selectedDare ? "Editing Dare" : "New Dare"}</p>
+              <h1>{selectedDare ? "Update Dare" : "Add Dare Card"}</h1>
+            </div>
+          </div>
+
+          <label>
+            Dare Text
+            <textarea
+              value={dareForm.text}
+              onChange={(event) => updateDareForm("text", event.target.value)}
+              placeholder="e.g., Take a group selfie with everyone pulling their worst serious face."
+              rows={4}
+            />
+          </label>
+
+          <div className="admin-form-grid">
+            <label>
+              Category
+              <select value={dareForm.category} onChange={(event) => updateDareForm("category", event.target.value)}>
+                {dareCategories.map((category) => (
+                  <option key={category.id} value={category.id}>{category.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Event Type
+              <select value={dareForm.event_type} onChange={(event) => updateDareForm("event_type", event.target.value)}>
+                <option value="all">All</option>
+                <option value="stag">Stag</option>
+                <option value="hen">Hen</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="admin-form-actions">
+            <button className="btn btn-primary admin-submit" type="submit" disabled={saving}>
+              {selectedDare ? <Save size={18} /> : <Plus size={18} />}
+              {saving ? "Saving" : selectedDare ? "Update Dare" : "Add Dare"}
+            </button>
+            {selectedDare && (
+              <button className="btn btn-secondary admin-submit" type="button" onClick={resetDareForm}>
+                <X size={18} />
+                Cancel Edit
+              </button>
+            )}
+          </div>
+        </form>
+
+        <aside className="admin-card admin-preview">
+          <div className="admin-card-header">
+            <ClipboardList size={20} />
+            <div>
+              <p>Global Dares</p>
+              <h2>{dares.length} Cards</h2>
+            </div>
+          </div>
+          <div className="admin-product-list admin-dare-list">
+            {dares.length === 0 ? (
+              <p className="admin-empty-text">No dares have been added yet.</p>
+            ) : (
+              dares.map((dare) => (
+                <article
+                  className={`admin-product-row ${selectedDare?.id === dare.id ? "admin-product-row-selected" : ""}`}
+                  key={dare.id}
+                >
+                  <button className="admin-request-main" type="button" onClick={() => selectDare(dare)}>
+                    <h3>{dare.text}</h3>
+                    <p>{dare.category} · {dare.event_type}</p>
+                  </button>
+                  <div className="admin-product-actions">
+                    <button type="button" onClick={() => handleDareDelete(dare)} aria-label="Delete dare">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
           </div>
         </aside>
       </section>

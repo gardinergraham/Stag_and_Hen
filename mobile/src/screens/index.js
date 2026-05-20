@@ -9,3 +9,4 @@ export { default as GalleryScreen } from './GalleryScreen';
 export { default as ShopScreen } from './ShopScreen';
 export { default as KittyScreen } from './KittyScreen';
 export { default as ShareQRScreen } from './ShareQRScreen';
+export { default as DaresScreen } from './DaresScreen';

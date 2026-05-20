@@ -31,7 +31,7 @@ const CreateEventScreen = ({ navigation }) => {
     media_delete_policy: 'never',
   });
   const [picker, setPicker] = useState(null);
-  const STAG_BLUE = '#2563EB';
+  const STAG_BLUE = '#00B7FF';
   const HEN_PINK = colors.primary; 
 
   const eventTypes = [

@@ -3,7 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors, typography } from '../theme';
+import { colors, typography, getEventTheme } from '../theme';
 import { useApp } from '../context/AppContext';
 
 import {
@@ -18,21 +18,25 @@ import {
   ShopScreen,
   KittyScreen,
   ShareQRScreen,
+  DaresScreen,
 } from '../screens';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
 // Tab Bar Icon Component
-const TabIcon = ({ icon, label, focused }) => (
+const TabIcon = ({ icon, label, focused, activeColor = colors.primary }) => (
   <View style={styles.tabIcon}>
     <Text style={[styles.tabEmoji, focused && styles.tabEmojiActive]}>{icon}</Text>
-    <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>{label}</Text>
+    <Text style={[styles.tabLabel, focused && { color: activeColor }]}>{label}</Text>
   </View>
 );
 
 // Main Tab Navigator (after login)
 const MainTabs = () => {
+  const { session } = useApp();
+  const theme = getEventTheme(session?.event_type);
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -46,7 +50,7 @@ const MainTabs = () => {
         component={HomeScreen}
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="🏠" label="Home" focused={focused} />
+            <TabIcon icon="🏠" label="Home" focused={focused} activeColor={theme.accent} />
           ),
         }}
       />
@@ -55,7 +59,7 @@ const MainTabs = () => {
         component={GalleryScreen}
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="📸" label="Gallery" focused={focused} />
+            <TabIcon icon="📸" label="Gallery" focused={focused} activeColor={theme.accent} />
           ),
         }}
       />
@@ -64,7 +68,16 @@ const MainTabs = () => {
         component={ShopScreen}
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="🛍️" label="Shop" focused={focused} />
+            <TabIcon icon={theme.shopIcon} label="Shop" focused={focused} activeColor={theme.accent} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Dares"
+        component={DaresScreen}
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon icon="🎯" label="Dares" focused={focused} activeColor={theme.accent} />
           ),
         }}
       />
@@ -73,7 +86,7 @@ const MainTabs = () => {
         component={KittyScreen}
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="💰" label="Kitty" focused={focused} />
+            <TabIcon icon="💰" label="Kitty" focused={focused} activeColor={theme.accent} />
           ),
         }}
       />
@@ -177,9 +190,6 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textMuted,
     fontSize: 10,
-  },
-  tabLabelActive: {
-    color: colors.primary,
   },
 });
 

@@ -10,7 +10,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
-import { colors, typography, spacing, shadows } from '../theme';
+import { colors, typography, spacing, getEventTheme } from '../theme';
 import { Card, Button } from '../components';
 import { eventsApi, kittyApi } from '../services/api';
 import { useApp } from '../context/AppContext';
@@ -87,7 +87,7 @@ const HomeScreen = ({ navigation }) => {
     ]);
   };
 
-  const isStag = session.event_type === 'stag';
+  const theme = getEventTheme(session.event_type);
   const eventDate = event?.event_date || session.event_date;
   const eventEndDate = event?.event_end_date || session.event_end_date;
   const countdown = getCountdownParts(eventDate);
@@ -106,8 +106,8 @@ const HomeScreen = ({ navigation }) => {
           <Image source={require('../../assets/logo.jpg')} style={styles.logo} />
           <View style={styles.headerText}>
             <Text style={styles.eventName}>{session.event_name}</Text>
-            <Text style={styles.eventType}>
-              {isStag ? '🦌 Stag Do' : '🐔 Hen Party'}
+            <Text style={[styles.eventType, { color: theme.accent }]}>
+              {theme.partyIcon} {theme.label}
             </Text>
           </View>
           <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
@@ -116,7 +116,7 @@ const HomeScreen = ({ navigation }) => {
         </View>
 
         {/* Welcome Card */}
-        <Card variant="highlight" style={styles.welcomeCard}>
+        <Card variant="highlight" style={[styles.welcomeCard, { borderColor: theme.accent }]}>
           <Card.Content>
             <Text style={styles.welcomeText}>
               Hey {session.member_name}! 👋
@@ -127,7 +127,8 @@ const HomeScreen = ({ navigation }) => {
             {isPreview && (
               <Button
                 title="Create Your Event"
-                variant="gold"
+                variant="primary"
+                color={theme.accent}
                 size="small"
                 onPress={async () => {
                   await logout();
@@ -139,12 +140,12 @@ const HomeScreen = ({ navigation }) => {
           </Card.Content>
         </Card>
 
-        <Card style={styles.countdownCard}>
+        <Card style={[styles.countdownCard, { borderColor: `${theme.accent}55` }]}>
           <Card.Content>
             <View style={styles.countdownHeader}>
               <View>
                 <Text style={styles.countdownLabel}>Countdown</Text>
-                <Text style={styles.countdownTitle}>{getCountdownLabel(eventDate)}</Text>
+                <Text style={[styles.countdownTitle, { color: theme.accent }]}>{getCountdownLabel(eventDate)}</Text>
               </View>
               <Text style={styles.countdownIcon}>⏳</Text>
             </View>
@@ -152,11 +153,11 @@ const HomeScreen = ({ navigation }) => {
             {countdown && !countdown.isPast && (
               <View style={styles.countdownPills}>
                 <View style={styles.countdownPill}>
-                  <Text style={styles.countdownPillValue}>{countdown.days}</Text>
+                  <Text style={[styles.countdownPillValue, { color: theme.accent }]}>{countdown.days}</Text>
                   <Text style={styles.countdownPillLabel}>Days</Text>
                 </View>
                 <View style={styles.countdownPill}>
-                  <Text style={styles.countdownPillValue}>{countdown.hours}</Text>
+                  <Text style={[styles.countdownPillValue, { color: theme.accent }]}>{countdown.hours}</Text>
                   <Text style={styles.countdownPillLabel}>Hours</Text>
                 </View>
               </View>
@@ -168,14 +169,14 @@ const HomeScreen = ({ navigation }) => {
         <View style={styles.statsBlock}>
           <Card style={styles.kittyStatCard} onPress={() => navigation.navigate('Kitty')}>
             <Card.Content style={styles.kittyStatContent}>
-              <Text style={styles.statValue}>£{kittyBalance.toFixed(2)}</Text>
+              <Text style={[styles.statValue, { color: theme.accent }]}>£{kittyBalance.toFixed(2)}</Text>
               <Text style={styles.statLabel}>Kitty Balance</Text>
             </Card.Content>
           </Card>
           <Card style={styles.crewStatCard}>
             <Card.Content style={styles.crewStatContent}>
               <Text style={styles.crewStatLabel}>Crew Members</Text>
-              <Text style={styles.crewStatValue}>{members.length}</Text>
+              <Text style={[styles.crewStatValue, { color: theme.accent }]}>{members.length}</Text>
             </Card.Content>
           </Card>
         </View>
@@ -184,18 +185,25 @@ const HomeScreen = ({ navigation }) => {
         <Text style={styles.sectionTitle}>Quick Actions</Text>
         <View style={styles.actionsGrid}>
           <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: `${colors.primary}20` }]}
+            style={[styles.actionCard, { backgroundColor: `${theme.accent}20` }]}
             onPress={() => navigation.navigate('Gallery')}
           >
             <Text style={styles.actionIcon}>📸</Text>
             <Text style={styles.actionLabel}>Gallery</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.actionCard, { backgroundColor: `${colors.secondary}20` }]}
+            style={[styles.actionCard, { backgroundColor: `${theme.accent}16` }]}
             onPress={() => navigation.navigate('Shop')}
           >
-            <Text style={styles.actionIcon}>🛍️</Text>
+            <Text style={styles.actionIcon}>{theme.shopIcon}</Text>
             <Text style={styles.actionLabel}>Shop</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionCard, { backgroundColor: `${theme.accent}20` }]}
+            onPress={() => navigation.navigate('Dares')}
+          >
+            <Text style={styles.actionIcon}>🎯</Text>
+            <Text style={styles.actionLabel}>Dares</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionCard, { backgroundColor: `${colors.gold}20` }]}
@@ -206,7 +214,7 @@ const HomeScreen = ({ navigation }) => {
           </TouchableOpacity>
           {isOwner && (
             <TouchableOpacity
-              style={[styles.actionCard, { backgroundColor: `${colors.secondary}20` }]}
+              style={[styles.actionCard, { backgroundColor: `${theme.accent}16` }]}
               onPress={() => navigation.navigate('ShareQR')}
             >
               <Text style={styles.actionIcon}>📲</Text>

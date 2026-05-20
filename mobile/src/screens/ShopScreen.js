@@ -16,13 +16,14 @@ import {
   ScrollView,
   TouchableWithoutFeedback,
 } from 'react-native';
-import { colors, typography, spacing } from '../theme';
+import { colors, typography, spacing, getEventTheme } from '../theme';
 import { Card, Button, TextInput } from '../components';
 import { shopApi } from '../services/api';
 import { useApp } from '../context/AppContext';
 
 const ShopScreen = () => {
   const { session } = useApp();
+  const theme = getEventTheme(session?.event_type);
   const [items, setItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -106,15 +107,25 @@ const ShopScreen = () => {
     : items;
 
   const getCategoryIcon = (categoryId) => {
-    const icons = {
+    const henIcons = {
       sashes: '🎀',
       hats: '👑',
       decorations: '🎈',
       games: '🎲',
-      accessories: '👓',
+      accessories: '👜',
       costumes: '👗',
       other: '📦',
     };
+    const stagIcons = {
+      sashes: '🍺',
+      hats: '🧢',
+      decorations: '🎯',
+      games: '🎲',
+      accessories: '⌚',
+      costumes: '🕶️',
+      other: '🧳',
+    };
+    const icons = session?.event_type === 'stag' ? stagIcons : henIcons;
     return icons[categoryId] || '📦';
   };
 
@@ -122,7 +133,10 @@ const ShopScreen = () => {
     <TouchableOpacity
       style={[
         styles.categoryChip,
-        selectedCategory === item.id && styles.categoryChipActive,
+        selectedCategory === item.id && {
+          borderColor: theme.accent,
+          backgroundColor: `${theme.accent}20`,
+        },
       ]}
       onPress={() => setSelectedCategory(selectedCategory === item.id ? null : item.id)}
     >
@@ -130,7 +144,7 @@ const ShopScreen = () => {
       <Text
         style={[
           styles.categoryLabel,
-          selectedCategory === item.id && styles.categoryLabelActive,
+          selectedCategory === item.id && { color: theme.accent },
         ]}
       >
         {item.name}
@@ -154,7 +168,7 @@ const ShopScreen = () => {
             {item.description}
           </Text>
         )}
-        <View style={styles.shopButton}>
+        <View style={[styles.shopButton, { backgroundColor: theme.accent }]}>
           <Text style={styles.shopButtonText}>View on Amazon →</Text>
         </View>
       </Card.Content>
@@ -165,10 +179,15 @@ const ShopScreen = () => {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Party Shop</Text>
-        <Text style={styles.subtitle}>Everything you need for the perfect party!</Text>
+        <Text style={styles.subtitle}>
+          {session?.event_type === 'stag'
+            ? 'Gear, games and weekend essentials for the lads.'
+            : 'Handbags, glam, games and party extras for the girls.'}
+        </Text>
         <Button
           title="Request an Item"
           variant="outline"
+          color={theme.accent}
           size="small"
           onPress={() => setShowRequestModal(true)}
           style={styles.requestButton}
@@ -297,10 +316,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  categoryChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: `${colors.primary}20`,
-  },
   categoryIcon: {
     fontSize: 16,
     marginRight: spacing.xs,
@@ -308,9 +323,6 @@ const styles = StyleSheet.create({
   categoryLabel: {
     ...typography.bodySmall,
     color: colors.textSecondary,
-  },
-  categoryLabelActive: {
-    color: colors.primary,
   },
   itemsList: {
     padding: spacing.lg,

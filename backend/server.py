@@ -11,7 +11,7 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # Import routers
-from routers import events_router, media_router, shop_router, shop_requests_router, kitty_router, auth_router
+from routers import events_router, media_router, shop_router, shop_requests_router, dares_router, kitty_router, auth_router
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -46,6 +46,7 @@ app.include_router(events_router, prefix="/api")
 app.include_router(media_router, prefix="/api")
 app.include_router(shop_router, prefix="/api")
 app.include_router(shop_requests_router, prefix="/api")
+app.include_router(dares_router, prefix="/api")
 app.include_router(kitty_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 

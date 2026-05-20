@@ -39,6 +39,30 @@ export const colors = {
   glowGold: 'rgba(255, 215, 0, 0.3)',
 };
 
+export const eventThemes = {
+  stag: {
+    accent: '#00B7FF',
+    accentLight: '#38D5FF',
+    accentDark: '#006DFF',
+    glow: 'rgba(0, 183, 255, 0.34)',
+    shopIcon: '⌚',
+    partyIcon: '🦌',
+    label: 'Stag Do',
+  },
+  hen: {
+    accent: colors.primary,
+    accentLight: colors.primaryLight,
+    accentDark: colors.primaryDark,
+    glow: colors.glowPink,
+    shopIcon: '👜',
+    partyIcon: '🐔',
+    label: 'Hen Party',
+  },
+};
+
+export const getEventTheme = (eventType) =>
+  eventThemes[eventType === 'stag' ? 'stag' : 'hen'];
+
 export const spacing = {
   xs: 4,
   sm: 8,

@@ -72,6 +72,29 @@ export const shopApi = {
   createRequest: (data) => api.post('/shop-requests/', data),
 };
 
+// Dares API
+export const daresApi = {
+  getDares: (eventId, eventType) =>
+    api.get('/dares/', {
+      params: {
+        event_id: eventId,
+        event_type: eventType,
+      },
+    }),
+  create: (data, ownerPin) =>
+    api.post('/dares/', data, {
+      params: {
+        owner_pin: ownerPin,
+      },
+    }),
+  delete: (dareId, ownerPin) =>
+    api.delete(`/dares/${dareId}`, {
+      params: {
+        owner_pin: ownerPin,
+      },
+    }),
+};
+
 // Kitty API
 export const kittyApi = {
   contribute: (data) => api.post('/kitty/contribute', data),

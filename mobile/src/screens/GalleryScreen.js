@@ -25,7 +25,7 @@ import api from '../services/api';
 import { useApp } from '../context/AppContext';
 import { getEventMediaWindows } from '../utils/eventDates';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 const colourFilters = [
   { name: 'original', label: 'Original', style: {} },
@@ -80,6 +80,7 @@ export default function GalleryScreen(props) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState('original');
+  const [imageSizes, setImageSizes] = useState({});
 
   // placeholder for later paid access logic
   const [hasPaidAccess] = useState(true);
@@ -341,10 +342,9 @@ export default function GalleryScreen(props) {
     }
 
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Needed', 'Photo library permission is required to save media.');
-        return;
+      const currentPermission = await MediaLibrary.getPermissionsAsync(true);
+      if (!currentPermission.granted && currentPermission.accessPrivileges === 'none') {
+        await MediaLibrary.requestPermissionsAsync(true);
       }
 
       const uri = await viewShotRef.current?.capture();
@@ -357,23 +357,112 @@ export default function GalleryScreen(props) {
       Alert.alert('Saved', 'This photo has been saved to your library.');
     } catch (error) {
       console.error('Save media failed:', error);
-      Alert.alert('Save Failed', 'Could not save this media.');
+      Alert.alert(
+        'Permission Needed',
+        'Please allow Stag & Hen to add photos to your library, then try saving again.'
+      );
     }
   };
 
-  const applyFilter = (uri, filterName) => {
+  const handleSaveFilteredToGallery = async () => {
+    const currentMedia = media[selectedIndex];
+    if (!currentMedia) return;
+
+    if (isPreview) {
+      Alert.alert('Preview Mode', 'Create an event to save edited photos to the gallery.');
+      return;
+    }
+
+    if (currentMedia.media_type !== 'image') {
+      Alert.alert('Photos Only', 'Filters can only be saved for photos.');
+      return;
+    }
+
+    if (!ensureUploadsOpen()) return;
+
+    try {
+      const uri = await viewShotRef.current?.capture();
+      if (!uri) {
+        Alert.alert('Save Failed', 'Could not capture this edited photo.');
+        return;
+      }
+
+      await uploadMedia({
+        uri,
+        type: 'image',
+        fileName: `filtered_${Date.now()}.jpg`,
+        mimeType: 'image/jpeg',
+      });
+
+      setSelectedFilter('original');
+      setFiltersVisible(false);
+    } catch (error) {
+      console.error('Save filtered media failed:', error);
+      Alert.alert('Save Failed', 'Could not save this edited photo to the event gallery.');
+    }
+  };
+
+  const rememberImageSize = (itemId, source) => {
+    if (!itemId || !source?.width || !source?.height || imageSizes[itemId]) return;
+    setImageSizes((current) => ({
+      ...current,
+      [itemId]: {
+        width: source.width,
+        height: source.height,
+      },
+    }));
+  };
+
+  const getContainedImageFrame = (itemId) => {
+    const source = imageSizes[itemId];
+    if (!source?.width || !source?.height) {
+      return { width, height: Math.min(height * 0.72, width * 1.25) };
+    }
+
+    const maxWidth = width;
+    const maxHeight = height * 0.78;
+    const imageRatio = source.width / source.height;
+    const frameRatio = maxWidth / maxHeight;
+
+    if (imageRatio > frameRatio) {
+      return {
+        width: maxWidth,
+        height: maxWidth / imageRatio,
+      };
+    }
+
+    return {
+      width: maxHeight * imageRatio,
+      height: maxHeight,
+    };
+  };
+
+  const renderFilteredPhoto = (item, filterName) => {
     const filter = colourFilters.find((f) => f.name === filterName) || colourFilters[0];
 
     return (
-      <View style={styles.filteredContainer}>
+      <>
         <Image
-          source={{ uri }}
+          source={{ uri: item.file_url }}
           style={[styles.filteredImage, filter.style]}
-          resizeMode="contain"
+          resizeMode="cover"
+          onLoad={(event) => rememberImageSize(item.id, event.nativeEvent?.source)}
         />
         {filterName === 'moody' && <View pointerEvents="none" style={styles.moodyOverlay} />}
         {filterName === 'soft' && <View pointerEvents="none" style={styles.softOverlay} />}
         {filterName === 'party' && <View pointerEvents="none" style={styles.partyOverlay} />}
+      </>
+    );
+  };
+
+  const applyFilter = (item, filterName) => {
+    const frame = getContainedImageFrame(item.id);
+
+    return (
+      <View style={styles.filteredContainer}>
+        <View style={[styles.filteredFrame, frame]}>
+          {renderFilteredPhoto(item, filterName)}
+        </View>
       </View>
     );
   };
@@ -580,11 +669,17 @@ export default function GalleryScreen(props) {
                           useNativeControls
                         />
                       ) : idx === selectedIndex ? (
-                        <ViewShot ref={viewShotRef} options={{ format: 'jpg', quality: 0.9 }}>
-                          {applyFilter(item.file_url, selectedFilter)}
-                        </ViewShot>
+                        <View style={styles.filteredContainer}>
+                          <ViewShot
+                            ref={viewShotRef}
+                            options={{ format: 'jpg', quality: 0.9 }}
+                            style={[styles.filteredFrame, getContainedImageFrame(item.id)]}
+                          >
+                            {renderFilteredPhoto(item, selectedFilter)}
+                          </ViewShot>
+                        </View>
                       ) : (
-                        applyFilter(item.file_url, selectedFilter)
+                        applyFilter(item, selectedFilter)
                       )}
                     </View>
                   ))}
@@ -621,7 +716,7 @@ export default function GalleryScreen(props) {
                       })}
                     </ScrollView>
 
-                    <TouchableOpacity style={styles.saveButton} onPress={handleSaveMedia}>
+                    <TouchableOpacity style={styles.saveButton} onPress={handleSaveFilteredToGallery}>
                       <Ionicons name="download" size={26} color="white" />
                     </TouchableOpacity>
                   </View>
@@ -889,8 +984,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'black',
   },
+  filteredFrame: {
+    overflow: 'hidden',
+    backgroundColor: 'black',
+  },
   filteredImage: {
-    width: width,
+    width: '100%',
     height: '100%',
   },
   moodyOverlay: {

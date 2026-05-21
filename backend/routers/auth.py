@@ -38,6 +38,7 @@ class AccessResponse(BaseModel):
     message: str
     owner_pin: Optional[str] = None
     access_pin: Optional[str] = None
+    payment_status: Optional[str] = None
 
 
 @router.post("/access-qr", response_model=AccessResponse)
@@ -82,7 +83,8 @@ async def access_via_qr(request: QRAccessRequest):
         event_end_date=event.get('event_end_date'),
         member_name=request.name,
         role=role,
-        message=f"Welcome to {event['event_name']}!"
+        message=f"Welcome to {event['event_name']}!",
+        payment_status=event.get('payment_status')
     )
 
 
@@ -128,7 +130,8 @@ async def access_via_manual(request: MemberAccess):
         event_end_date=event.get('event_end_date'),
         member_name=request.name,
         role=role,
-        message=f"Welcome to {event['event_name']}!"
+        message=f"Welcome to {event['event_name']}!",
+        payment_status=event.get('payment_status')
     )
 
 
@@ -155,5 +158,6 @@ async def owner_login(request: OwnerLoginRequest):
         role="owner",
         message=f"Welcome back, {event['owner_name']}!",
         owner_pin=event['owner_pin'],
-        access_pin=event['access_pin']
+        access_pin=event['access_pin'],
+        payment_status=event.get('payment_status')
     )

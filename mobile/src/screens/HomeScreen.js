@@ -11,10 +11,11 @@ import {
   Alert,
   Modal,
   TextInput as NativeTextInput,
+  Linking,
 } from 'react-native';
 import { colors, typography, spacing, getEventTheme } from '../theme';
 import { Card, Button } from '../components';
-import { eventsApi, kittyApi, pointsApi } from '../services/api';
+import { eventsApi, kittyApi, pointsApi, paymentsApi } from '../services/api';
 import { useApp } from '../context/AppContext';
 import { formatEventDateRange, getCountdownLabel, getCountdownParts } from '../utils/eventDates';
 
@@ -32,6 +33,7 @@ const HomeScreen = ({ navigation }) => {
   const [awardReason, setAwardReason] = useState('');
   const [awardingPoints, setAwardingPoints] = useState(false);
   const [deletingData, setDeletingData] = useState(false);
+  const [startingCheckout, setStartingCheckout] = useState(false);
 
   const loadData = async () => {
     if (isPreview) {
@@ -66,11 +68,16 @@ const HomeScreen = ({ navigation }) => {
         pointsApi.getLeaderboard(session.event_id),
       ]);
       setEvent(eventRes.data);
+      const sessionUpdates = {};
+      if (eventRes.data?.payment_status && eventRes.data.payment_status !== session.payment_status) {
+        sessionUpdates.payment_status = eventRes.data.payment_status;
+      }
       if (eventRes.data?.event_date && eventRes.data.event_date !== session.event_date) {
-        await updateSession({
-          event_date: eventRes.data.event_date,
-          event_end_date: eventRes.data.event_end_date,
-        });
+        sessionUpdates.event_date = eventRes.data.event_date;
+        sessionUpdates.event_end_date = eventRes.data.event_end_date;
+      }
+      if (Object.keys(sessionUpdates).length > 0) {
+        await updateSession(sessionUpdates);
       }
       setKittyBalance(kittyRes.data.balance);
       setMembers(membersRes.data);
@@ -108,6 +115,8 @@ const HomeScreen = ({ navigation }) => {
   const eventDate = event?.event_date || session.event_date;
   const eventEndDate = event?.event_end_date || session.event_end_date;
   const countdown = getCountdownParts(eventDate);
+  const paymentStatus = event?.payment_status || session?.payment_status || 'pending';
+  const paymentRequired = isOwner && !isPreview && paymentStatus !== 'paid';
   const pointsByName = leaderboard.reduce((acc, entry) => {
     acc[entry.member_name] = entry.points;
     return acc;
@@ -153,6 +162,25 @@ const HomeScreen = ({ navigation }) => {
       Alert.alert('Error', error?.response?.data?.detail || 'Could not award points.');
     } finally {
       setAwardingPoints(false);
+    }
+  };
+
+  const startEventCheckout = async () => {
+    if (!session?.event_id || !session?.owner_pin) return;
+    setStartingCheckout(true);
+    try {
+      const response = await paymentsApi.createEventCheckout({
+        event_id: session.event_id,
+        owner_pin: session.owner_pin,
+      });
+      const checkoutUrl = response.data?.checkout_url;
+      if (checkoutUrl) {
+        await Linking.openURL(checkoutUrl);
+      }
+    } catch (error) {
+      Alert.alert('Payment Error', error?.response?.data?.detail || 'Could not start Stripe Checkout.');
+    } finally {
+      setStartingCheckout(false);
     }
   };
 
@@ -308,6 +336,25 @@ const HomeScreen = ({ navigation }) => {
             )}
           </Card.Content>
         </Card>
+
+        {paymentRequired && (
+          <Card style={styles.paymentCard}>
+            <Card.Content>
+              <Text style={styles.paymentTitle}>Complete Event Payment</Text>
+              <Text style={styles.paymentText}>
+                This event is saved, but payment is still pending. Complete Stripe Checkout to activate the package.
+              </Text>
+              <Button
+                title="Open Stripe Checkout"
+                variant="primary"
+                color={theme.accent}
+                loading={startingCheckout}
+                onPress={startEventCheckout}
+                style={styles.paymentButton}
+              />
+            </Card.Content>
+          </Card>
+        )}
 
         {/* Quick Stats */}
         <View style={styles.statsBlock}>
@@ -570,6 +617,25 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     borderColor: colors.borderLight,
     borderWidth: 1,
+  },
+  paymentCard: {
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.45)',
+  },
+  paymentTitle: {
+    ...typography.h3,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  paymentText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: spacing.md,
+  },
+  paymentButton: {
+    alignSelf: 'flex-start',
   },
   countdownHeader: {
     flexDirection: 'row',

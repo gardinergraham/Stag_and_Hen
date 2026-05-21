@@ -619,6 +619,16 @@
   margin-top: 2rem;
 }
 
+.payment-status-hero {
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+}
+
+.payment-status-actions {
+  margin-top: 2rem;
+}
+
 /* Responsive */
 @media (max-width: 1024px) {
   .app-preview-content {

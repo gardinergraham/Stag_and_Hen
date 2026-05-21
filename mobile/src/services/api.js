@@ -164,6 +164,11 @@ export const pointsApi = {
     }),
 };
 
+// Payments API
+export const paymentsApi = {
+  createEventCheckout: (data) => api.post('/payments/event-checkout', data),
+};
+
 // Session Storage
 export const sessionStorage = {
   async saveSession(data) {

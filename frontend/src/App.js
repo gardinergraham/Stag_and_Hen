@@ -404,6 +404,33 @@ const TermsPage = () => (
   </div>
 );
 
+const PaymentStatusPage = ({ status }) => {
+  const success = status === "success";
+  return (
+    <div className="App">
+      <Header />
+      <main className="legal-page">
+        <section className="legal-hero payment-status-hero">
+          <div className="container">
+            <p className="legal-eyebrow">{success ? "Payment Complete" : "Payment Cancelled"}</p>
+            <h1>{success ? "Your Event Is Paid" : "Checkout Was Cancelled"}</h1>
+            <p>
+              {success
+                ? "Stripe has confirmed the payment. You can return to the Stag & Hen app and continue setting up your event."
+                : "No payment was taken. You can return to the Stag & Hen app and try again from the event owner screen."}
+            </p>
+            <div className="hero-buttons payment-status-actions">
+              <a href="/" className="btn btn-primary">Back to Home</a>
+              <a href="#download" className="btn btn-secondary">Get the App</a>
+            </div>
+          </div>
+        </section>
+      </main>
+      <Footer />
+    </div>
+  );
+};
+
 const AdminPage = () => {
   const [credentials, setCredentials] = useState({ username: "", password: "" });
   const [isAuthed, setIsAuthed] = useState(false);
@@ -1443,6 +1470,12 @@ function App() {
   }
   if (window.location.pathname === "/terms") {
     return <TermsPage />;
+  }
+  if (window.location.pathname === "/payment-success") {
+    return <PaymentStatusPage status="success" />;
+  }
+  if (window.location.pathname === "/payment-cancel") {
+    return <PaymentStatusPage status="cancel" />;
   }
 
   return (

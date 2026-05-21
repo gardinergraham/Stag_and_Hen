@@ -8,11 +8,12 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  Linking,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, typography, spacing } from '../theme';
 import { Button, TextInput, Card } from '../components';
-import { eventsApi } from '../services/api';
+import { eventsApi, paymentsApi } from '../services/api';
 import { useApp } from '../context/AppContext';
 
 const CreateEventScreen = ({ navigation }) => {
@@ -193,11 +194,21 @@ const CreateEventScreen = ({ navigation }) => {
         event_end_date: event.event_end_date,
         event_tier: event.event_tier,
         event_tier_price: event.event_tier_price,
+        payment_status: event.payment_status,
       });
 
+      const checkoutResponse = await paymentsApi.createEventCheckout({
+        event_id: event.id,
+        owner_pin: event.owner_pin,
+      });
+      const checkoutUrl = checkoutResponse.data?.checkout_url;
+      if (checkoutUrl) {
+        await Linking.openURL(checkoutUrl);
+      }
+
       Alert.alert(
-        'Event Created!',
-        `Your ${form.event_type === 'stag' ? 'Stag Do' : 'Hen Party'} is ready!\n\nPackage: £${event.event_tier_price?.toFixed?.(2) || form.event_tier_price.toFixed(2)}\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nKeep these safe!`,
+        'Event Created - Payment Started',
+        `Your ${form.event_type === 'stag' ? 'Stag Do' : 'Hen Party'} has been created and Stripe Checkout has opened.\n\nPackage: £${event.event_tier_price?.toFixed?.(2) || form.event_tier_price.toFixed(2)}\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nKeep these safe!`,
         [
           {
             text: 'Show QR Code',
@@ -211,7 +222,7 @@ const CreateEventScreen = ({ navigation }) => {
         ]
       );
     } catch (error) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to create event');
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to create event or start payment');
     } finally {
       setLoading(false);
     }
@@ -339,7 +350,7 @@ const CreateEventScreen = ({ navigation }) => {
         </View>
 
        <Button
-          title="Create Event"
+          title="Create Event & Pay"
           variant="primary"
           color={form.event_type === 'stag' ? STAG_BLUE : HEN_PINK}
           size="large"

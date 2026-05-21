@@ -306,8 +306,8 @@ const Footer = () => (
         <div className="footer-column">
           <h4>Support</h4>
           <ul>
-            <li><a href="#" data-testid="footer-faq">FAQs</a></li>
-            <li><a href="#" data-testid="footer-contact">Contact Us</a></li>
+            <li><a href="/support" data-testid="footer-faq">FAQs</a></li>
+            <li><a href="/support" data-testid="footer-contact">Contact Us</a></li>
             <li><a href="#" data-testid="footer-privacy">Privacy Policy</a></li>
             <li><a href="/terms" data-testid="footer-terms">Terms of Service</a></li>
           </ul>
@@ -430,6 +430,70 @@ const PaymentStatusPage = ({ status }) => {
     </div>
   );
 };
+
+const SupportPage = () => (
+  <div className="App">
+    <Header />
+    <main className="legal-page">
+      <section className="legal-hero support-hero">
+        <div className="container">
+          <p className="legal-eyebrow">Support</p>
+          <h1>Stag & Hen Support</h1>
+          <p>We are here to help you create, share, and enjoy your stag or hen event.</p>
+        </div>
+      </section>
+
+      <section className="legal-content-section">
+        <div className="container support-content">
+          <article className="support-card">
+            <h2>Contact Us</h2>
+            <p>If you need help or are experiencing issues, contact us at:</p>
+            <p><strong>support@stag-and-hen.com</strong></p>
+            <p>We aim to reply within 24 hours.</p>
+          </article>
+
+          <article className="support-card">
+            <h2>Quick Help</h2>
+            <ul>
+              <li><strong>Join an event:</strong> Open the app, choose QR scan or manual join, then enter the event name and PIN.</li>
+              <li><strong>Owner login:</strong> Use the event name and owner PIN created when the event was purchased.</li>
+              <li><strong>Upload photos or videos:</strong> Make sure camera and photo permissions are enabled on your device.</li>
+              <li><strong>Payment completed:</strong> Return to the app home screen and pull to refresh if the event still says payment pending.</li>
+            </ul>
+          </article>
+
+          <article className="support-card">
+            <h2>For Event Owners</h2>
+            <p>As an event owner, you can:</p>
+            <ul>
+              <li>Create and purchase an event package</li>
+              <li>Share QR codes and PINs with the crew</li>
+              <li>Manage the private gallery and delete media</li>
+              <li>Track the kitty, award points, and run party games</li>
+              <li>Delete event data from the app home screen</li>
+            </ul>
+          </article>
+
+          <article className="support-card">
+            <h2>Troubleshooting</h2>
+            <ul>
+              <li><strong>Guests cannot join:</strong> Double-check the event name and access PIN.</li>
+              <li><strong>Photos will not upload:</strong> Check media permissions and your network connection.</li>
+              <li><strong>Upload window closed:</strong> The package rules may limit media access after the event.</li>
+              <li><strong>Payment issue:</strong> Try opening Stripe Checkout again from the owner home screen.</li>
+            </ul>
+          </article>
+
+          <div className="support-links">
+            <a href="/" className="btn btn-secondary">About Stag & Hen</a>
+            <a href="/terms" className="btn btn-primary">Terms & Conditions</a>
+          </div>
+        </div>
+      </section>
+    </main>
+    <Footer />
+  </div>
+);
 
 const AdminPage = () => {
   const [credentials, setCredentials] = useState({ username: "", password: "" });
@@ -1470,6 +1534,9 @@ function App() {
   }
   if (window.location.pathname === "/terms") {
     return <TermsPage />;
+  }
+  if (window.location.pathname === "/support") {
+    return <SupportPage />;
   }
   if (window.location.pathname === "/payment-success") {
     return <PaymentStatusPage status="success" />;

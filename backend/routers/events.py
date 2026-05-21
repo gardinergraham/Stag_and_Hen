@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from models.event import Event, EventCreate, EventUpdate
 from models.member import Member
 from services.qr_code import generate_qr_code_data
+from services.s3 import delete_s3_file_by_url
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -14,6 +15,33 @@ router = APIRouter(prefix="/events", tags=["events"])
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
+
+
+async def delete_event_data(event_ids: List[str]):
+    """Permanently remove event-owned records from the database."""
+    if not event_ids:
+        return {}
+
+    event_query = {"event_id": {"$in": event_ids}}
+    results = {}
+    media_items = await db.media.find(event_query, {"_id": 0, "file_url": 1, "thumbnail_url": 1}).to_list(5000)
+    deleted_files = 0
+    for media in media_items:
+        for url in [media.get("file_url"), media.get("thumbnail_url")]:
+            if url and delete_s3_file_by_url(url):
+                deleted_files += 1
+    results["media_files"] = deleted_files
+    results["media"] = (await db.media.delete_many(event_query)).deleted_count
+    results["members"] = (await db.members.delete_many(event_query)).deleted_count
+    results["kitty_transactions"] = (await db.kitty_transactions.delete_many(event_query)).deleted_count
+    results["point_awards"] = (await db.point_awards.delete_many(event_query)).deleted_count
+    results["spin_results"] = (await db.spin_results.delete_many(event_query)).deleted_count
+    results["secret_missions"] = (await db.secret_missions.delete_many(event_query)).deleted_count
+    results["event_dares"] = (await db.dares.delete_many(event_query)).deleted_count
+    results["event_spinner_pairs"] = (await db.spinner_pairs.delete_many(event_query)).deleted_count
+    results["shop_requests"] = (await db.shop_requests.delete_many(event_query)).deleted_count
+    results["events"] = (await db.events.delete_many({"id": {"$in": event_ids}})).deleted_count
+    return results
 
 
 @router.post("/", response_model=Event)
@@ -123,22 +151,39 @@ async def update_event(event_id: str, event_update: EventUpdate, owner_pin: str)
     return updated_event
 
 
+@router.delete("/owner/all")
+async def delete_all_owner_events(owner_name: str, owner_pin: str, include_owner_data: bool = False):
+    """Delete all events owned by this owner PIN/name, including event data."""
+    events = await db.events.find({
+        "owner_name": owner_name,
+        "owner_pin": owner_pin,
+    }, {"_id": 0, "id": 1}).to_list(500)
+    if not events:
+        raise HTTPException(status_code=404, detail="No matching owner events found")
+
+    event_ids = [event["id"] for event in events]
+    deleted = await delete_event_data(event_ids)
+    return {
+        "message": "Owner events and related data deleted successfully",
+        "deleted_event_ids": event_ids,
+        "include_owner_data": include_owner_data,
+        "deleted": deleted,
+    }
+
+
 @router.delete("/{event_id}")
 async def delete_event(event_id: str, owner_pin: str):
-    """Soft delete an event (owner only)"""
+    """Delete an event and related event data (owner only)"""
     event = await db.events.find_one({"id": event_id})
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
     if event['owner_pin'] != owner_pin:
         raise HTTPException(status_code=403, detail="Invalid owner PIN")
-    
-    await db.events.update_one(
-        {"id": event_id}, 
-        {"$set": {"is_active": False, "updated_at": datetime.now(timezone.utc).isoformat()}}
-    )
-    
-    return {"message": "Event deleted successfully"}
+
+    deleted = await delete_event_data([event_id])
+
+    return {"message": "Event and related data deleted successfully", "deleted": deleted}
 
 
 @router.get("/{event_id}/qr-code")

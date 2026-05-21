@@ -31,6 +31,7 @@ const HomeScreen = ({ navigation }) => {
   const [awardPoints, setAwardPoints] = useState('10');
   const [awardReason, setAwardReason] = useState('');
   const [awardingPoints, setAwardingPoints] = useState(false);
+  const [deletingData, setDeletingData] = useState(false);
 
   const loadData = async () => {
     if (isPreview) {
@@ -153,6 +154,86 @@ const HomeScreen = ({ navigation }) => {
     } finally {
       setAwardingPoints(false);
     }
+  };
+
+  const finishDeletion = async (message) => {
+    Alert.alert('Deleted', message, [
+      {
+        text: 'OK',
+        onPress: async () => {
+          await logout();
+          navigation.replace('Welcome');
+        },
+      },
+    ]);
+  };
+
+  const deleteThisEvent = () => {
+    if (isPreview) {
+      Alert.alert('Preview Mode', 'Create an event to manage real event data.');
+      return;
+    }
+    if (!isOwner || !session?.owner_pin) return;
+
+    Alert.alert(
+      'Delete This Event?',
+      'This permanently deletes this event, its crew, media records, kitty history, games, missions, points, and PIN access. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Event',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingData(true);
+            try {
+              await eventsApi.delete(session.event_id, session.owner_pin);
+              await finishDeletion('This event and its related data have been deleted.');
+            } catch (error) {
+              Alert.alert('Error', error?.response?.data?.detail || 'Could not delete this event.');
+            } finally {
+              setDeletingData(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const deleteAllOwnerEvents = (includeOwnerData = false) => {
+    if (isPreview) {
+      Alert.alert('Preview Mode', 'Create an event to manage real event data.');
+      return;
+    }
+    if (!isOwner || !session?.owner_pin) return;
+
+    Alert.alert(
+      includeOwnerData ? 'Delete Owner Data?' : 'Delete All My Events?',
+      includeOwnerData
+        ? 'This permanently deletes all events owned by this owner login, all related media records, crew data, game data, and saved owner PIN access from this device. This cannot be undone.'
+        : 'This permanently deletes all events owned by this owner login, including their media records, crew data, games, missions, kitty history, and points. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: includeOwnerData ? 'Delete Owner Data' : 'Delete All Events',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingData(true);
+            try {
+              await eventsApi.deleteAllOwnerEvents(session.member_name, session.owner_pin, includeOwnerData);
+              await finishDeletion(
+                includeOwnerData
+                  ? 'All owner events, related data, and local sign-in details have been deleted.'
+                  : 'All events owned by this owner login and their related data have been deleted.'
+              );
+            } catch (error) {
+              Alert.alert('Error', error?.response?.data?.detail || 'Could not delete owner events.');
+            } finally {
+              setDeletingData(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -342,6 +423,44 @@ const HomeScreen = ({ navigation }) => {
             ))}
           </Card.Content>
         </Card>
+
+        {isOwner && (
+          <>
+            <Text style={styles.sectionTitle}>Data & Deletion</Text>
+            <Card style={styles.deleteCard}>
+              <Card.Content>
+                <Text style={styles.deleteTitle}>Delete event data</Text>
+                <Text style={styles.deleteText}>
+                  These actions permanently remove event records from Stag & Hen. Only the owner can use them.
+                </Text>
+                <Button
+                  title="Delete This Event & Media"
+                  variant="outline"
+                  color={colors.error}
+                  loading={deletingData}
+                  onPress={deleteThisEvent}
+                  style={styles.deleteButton}
+                />
+                <Button
+                  title="Delete All My Events & Media"
+                  variant="outline"
+                  color={colors.error}
+                  loading={deletingData}
+                  onPress={() => deleteAllOwnerEvents(false)}
+                  style={styles.deleteButton}
+                />
+                <Button
+                  title="Delete Owner Data & Sign-In"
+                  variant="primary"
+                  color={colors.error}
+                  loading={deletingData}
+                  onPress={() => deleteAllOwnerEvents(true)}
+                  style={styles.deleteButton}
+                />
+              </Card.Content>
+            </Card>
+          </>
+        )}
       </ScrollView>
 
       <Modal visible={awardModalVisible} transparent animationType="fade">
@@ -712,6 +831,26 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     flex: 1,
+  },
+  deleteCard: {
+    marginBottom: spacing.xl,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.35)',
+  },
+  deleteTitle: {
+    ...typography.h3,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  deleteText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    lineHeight: 20,
+    marginBottom: spacing.md,
+  },
+  deleteButton: {
+    width: '100%',
+    marginTop: spacing.sm,
   },
 });
 

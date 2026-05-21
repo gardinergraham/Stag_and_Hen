@@ -34,6 +34,14 @@ export const eventsApi = {
     api.put(`/events/${eventId}?owner_pin=${ownerPin}`, data),
   delete: (eventId, ownerPin) => 
     api.delete(`/events/${eventId}?owner_pin=${ownerPin}`),
+  deleteAllOwnerEvents: (ownerName, ownerPin, includeOwnerData = false) =>
+    api.delete('/events/owner/all', {
+      params: {
+        owner_name: ownerName,
+        owner_pin: ownerPin,
+        include_owner_data: includeOwnerData,
+      },
+    }),
   getQRCode: (eventId, ownerPin) => 
     api.get(`/events/${eventId}/qr-code?owner_pin=${ownerPin}`),
   getMembers: (eventId) => api.get(`/events/${eventId}/members`),

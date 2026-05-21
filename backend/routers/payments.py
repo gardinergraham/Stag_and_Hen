@@ -41,8 +41,11 @@ def stripe_value(obj, key, default=None):
 
 
 def stripe_metadata(obj) -> dict:
-    metadata = stripe_value(obj, "metadata", {}) or {}
-    return dict(metadata)
+    try:
+        metadata = stripe_value(obj, "metadata", {}) or {}
+        return dict(metadata)
+    except Exception:
+        return {}
 
 
 def stripe_list_data(obj):
@@ -74,20 +77,23 @@ async def find_recent_paid_session_for_event(event_id: str):
     except Exception:
         return None
 
-    for session in stripe_list_data(sessions):
-        metadata = stripe_metadata(session)
-        if (
-            metadata.get("event_id") == event_id
-            or stripe_value(session, "client_reference_id") == event_id
-        ) and (
-            stripe_value(session, "payment_status") == "paid"
-            or stripe_value(session, "status") == "complete"
-        ):
-            return session
+    try:
+        for session in stripe_list_data(sessions):
+            metadata = stripe_metadata(session)
+            if (
+                metadata.get("event_id") == event_id
+                or stripe_value(session, "client_reference_id") == event_id
+            ) and (
+                stripe_value(session, "payment_status") == "paid"
+                or stripe_value(session, "status") == "complete"
+            ):
+                return session
+    except Exception:
+        return None
     return None
 
 
-async def sync_event_payment_status(event: dict) -> str:
+async def sync_event_payment_status(event: dict, allow_recent_lookup: bool = True) -> str:
     if event.get("payment_status") == "paid":
         return "paid"
 
@@ -102,7 +108,7 @@ async def sync_event_payment_status(event: dict) -> str:
         except Exception:
             session = None
 
-    if not session:
+    if not session and allow_recent_lookup:
         session = await find_recent_paid_session_for_event(event["id"])
 
     if not session:
@@ -128,7 +134,7 @@ async def get_event_payment_status(event_id: str, owner_pin: str):
     if not event:
         raise HTTPException(status_code=404, detail="Event not found or owner PIN is invalid.")
 
-    payment_status = await sync_event_payment_status(event)
+    payment_status = await sync_event_payment_status(event, allow_recent_lookup=True)
     return EventPaymentStatusResponse(
         event_id=event_id,
         payment_status=payment_status,
@@ -149,7 +155,10 @@ async def create_event_checkout(checkout_input: EventCheckoutCreate):
     if not event:
         raise HTTPException(status_code=404, detail="Event not found or owner PIN is invalid.")
 
-    payment_status = await sync_event_payment_status(event)
+    payment_status = await sync_event_payment_status(
+        event,
+        allow_recent_lookup=bool(event.get("stripe_checkout_session_id")),
+    )
     if payment_status == "paid":
         return EventCheckoutResponse(
             checkout_url="",

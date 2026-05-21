@@ -178,6 +178,7 @@ const DaresScreen = ({ navigation }) => {
   const [spinResultsVisible, setSpinResultsVisible] = useState(false);
   const [secretMission, setSecretMission] = useState(null);
   const [missionCompletions, setMissionCompletions] = useState([]);
+  const [missionEvidence, setMissionEvidence] = useState('');
   const [loadingMission, setLoadingMission] = useState(false);
   const [completingMission, setCompletingMission] = useState(false);
   const [selectedMessagePrompt, setSelectedMessagePrompt] = useState(messagePrompts[0]);
@@ -393,7 +394,7 @@ const DaresScreen = ({ navigation }) => {
     }
   };
 
-  const drawSecretMission = async () => {
+  const drawSecretMission = async (forceNew = false) => {
     const memberName = session?.member_name || session?.owner_name;
     if (!memberName) {
       Alert.alert('Name Needed', 'Join the event with your name first.');
@@ -402,10 +403,11 @@ const DaresScreen = ({ navigation }) => {
 
     if (session?.is_preview) {
       setSecretMission({
-        id: 'preview-mission',
+        id: `preview-mission-${Date.now()}`,
         mission_text: 'Convince someone it is your birthday without saying the word birthday.',
         is_completed: false,
       });
+      setMissionEvidence('');
       return;
     }
 
@@ -414,8 +416,14 @@ const DaresScreen = ({ navigation }) => {
       const response = await daresApi.assignSecretMission({
         event_id: session.event_id,
         member_name: memberName,
+        force_new: forceNew,
       });
-      setSecretMission(response.data);
+      setSecretMission({
+        ...response.data,
+        is_completed: false,
+        evidence: null,
+      });
+      setMissionEvidence('');
     } catch (error) {
       Alert.alert('Error', error?.response?.data?.detail || 'Could not draw your mission.');
     } finally {
@@ -423,26 +431,71 @@ const DaresScreen = ({ navigation }) => {
     }
   };
 
+  const drawAnotherSecretMission = () => {
+    setSecretMission(null);
+    setMissionEvidence('');
+    setTimeout(() => drawSecretMission(true), 0);
+  };
+
   const completeSecretMission = async () => {
     if (!secretMission) return;
     const memberName = session?.member_name || session?.owner_name;
+    const evidence = missionEvidence.trim();
+
+    if (!evidence) {
+      Alert.alert('Evidence Needed', 'Add a quick note about how you completed the mission.');
+      return;
+    }
 
     if (session?.is_preview) {
-      setSecretMission((current) => ({ ...current, is_completed: true }));
+      setSecretMission((current) => ({ ...current, is_completed: true, evidence }));
+      setMissionCompletions((current) => [
+        {
+          id: secretMission.id,
+          event_id: session?.event_id || 'preview',
+          member_name: memberName || 'Preview Guest',
+          mission_text: secretMission.mission_text,
+          evidence,
+          is_completed: true,
+          completed_at: new Date().toISOString(),
+        },
+        ...current,
+      ]);
       return;
     }
 
     setCompletingMission(true);
     try {
-      const response = await daresApi.completeSecretMission(secretMission.id, memberName);
+      const response = await daresApi.completeSecretMission(secretMission.id, memberName, evidence);
       setSecretMission(response.data);
+      setMissionEvidence('');
       await loadMissionCompletions();
-      Alert.alert('Mission Complete', 'Logged without revealing what you had to do.');
+      Alert.alert('Mission Complete', 'Your mission and evidence have been logged.');
     } catch (error) {
       Alert.alert('Error', error?.response?.data?.detail || 'Could not complete your mission.');
     } finally {
       setCompletingMission(false);
     }
+  };
+
+  const deleteCompletedMission = (mission) => {
+    if (!isOwner || !session?.owner_pin) return;
+
+    Alert.alert('Delete Mission', `Remove ${mission.member_name}'s completed mission?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await daresApi.deleteSecretMission(mission.id, session.owner_pin);
+            await loadMissionCompletions();
+          } catch (error) {
+            Alert.alert('Error', error?.response?.data?.detail || 'Could not delete this mission.');
+          }
+        },
+      },
+    ]);
   };
 
   const uploadVideoMessage = async (asset) => {
@@ -856,31 +909,53 @@ const DaresScreen = ({ navigation }) => {
                 )}
 
                 {secretMission?.is_completed ? (
-                  <View style={styles.missionCompleteBadge}>
-                    <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-                    <Text style={styles.missionCompleteText}>Mission completed</Text>
-                  </View>
-                ) : (
-                  <View style={styles.dareActions}>
+                  <>
+                    <View style={styles.missionCompleteBadge}>
+                      <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                      <Text style={styles.missionCompleteText}>Mission completed</Text>
+                    </View>
                     <Button
-                      title={secretMission ? 'Keep Mission' : 'Draw Mission'}
-                      variant={secretMission ? 'outline' : 'primary'}
+                      title="Draw Another Mission"
+                      variant="primary"
                       color={theme.accent}
                       loading={loadingMission}
-                      onPress={drawSecretMission}
-                      style={styles.dareButton}
+                      onPress={drawAnotherSecretMission}
+                      style={styles.modalButton}
                     />
+                  </>
+                ) : (
+                  <>
                     {secretMission && (
-                      <Button
-                        title="Completed"
-                        variant="primary"
-                        color={theme.accent}
-                        loading={completingMission}
-                        onPress={completeSecretMission}
-                        style={styles.dareButton}
+                      <TextInput
+                        label="Evidence"
+                        placeholder="e.g., Got Dave to say pineapple at the bar"
+                        value={missionEvidence}
+                        onChangeText={setMissionEvidence}
+                        multiline
+                        numberOfLines={3}
                       />
                     )}
-                  </View>
+                    <View style={styles.dareActions}>
+                      <Button
+                        title={secretMission ? 'Keep Mission' : 'Draw Mission'}
+                        variant={secretMission ? 'outline' : 'primary'}
+                        color={theme.accent}
+                        loading={loadingMission}
+                        onPress={drawSecretMission}
+                        style={styles.dareButton}
+                      />
+                      {secretMission && (
+                        <Button
+                          title="Completed"
+                          variant="primary"
+                          color={theme.accent}
+                          loading={completingMission}
+                          onPress={completeSecretMission}
+                          style={styles.dareButton}
+                        />
+                      )}
+                    </View>
+                  </>
                 )}
               </Card.Content>
             </Card>
@@ -900,9 +975,26 @@ const DaresScreen = ({ navigation }) => {
                   <Text style={styles.spinnerHint}>Completed missions will show here without revealing the secrets.</Text>
                 ) : (
                   missionCompletions.slice(0, 6).map((mission) => (
-                    <View key={mission.id} style={styles.completedRow}>
+                    <View key={mission.id} style={styles.missionBoardRow}>
                       <Ionicons name="checkmark-circle" size={18} color={theme.accent} />
-                      <Text style={styles.completedText}>{mission.member_name} completed a secret mission</Text>
+                      <View style={styles.missionBoardTextWrap}>
+                        {isOwner ? (
+                          <>
+                            <Text style={styles.completedText}>{mission.member_name} completed:</Text>
+                            <Text style={styles.missionBoardMission}>{mission.mission_text}</Text>
+                            {mission.evidence ? (
+                              <Text style={styles.missionBoardEvidence}>Evidence: {mission.evidence}</Text>
+                            ) : null}
+                          </>
+                        ) : (
+                          <Text style={styles.completedText}>{mission.member_name} completed a secret mission</Text>
+                        )}
+                      </View>
+                      {isOwner && (
+                        <TouchableOpacity onPress={() => deleteCompletedMission(mission)}>
+                          <Ionicons name="trash-outline" size={20} color={colors.error} />
+                        </TouchableOpacity>
+                      )}
                     </View>
                   ))
                 )}
@@ -1576,6 +1668,29 @@ const styles = StyleSheet.create({
   missionCompleteText: {
     ...typography.button,
     color: colors.success,
+  },
+  missionBoardRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignItems: 'flex-start',
+    padding: spacing.md,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    marginBottom: spacing.sm,
+  },
+  missionBoardTextWrap: {
+    flex: 1,
+  },
+  missionBoardMission: {
+    ...typography.bodySmall,
+    color: colors.text,
+    fontWeight: '700',
+    marginTop: spacing.xs,
+  },
+  missionBoardEvidence: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
   },
   dareContent: {
     padding: spacing.lg,

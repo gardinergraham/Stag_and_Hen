@@ -109,13 +109,19 @@ export const daresApi = {
       },
     }),
   assignSecretMission: (data) => api.post('/dares/secret-mission/assign', data),
-  completeSecretMission: (missionId, memberName) =>
-    api.put(`/dares/secret-mission/${missionId}/complete`, null, {
+  completeSecretMission: (missionId, memberName, evidence) =>
+    api.put(`/dares/secret-mission/${missionId}/complete`, { evidence }, {
       params: {
         member_name: memberName,
       },
     }),
   getSecretMissionCompletions: (eventId) => api.get(`/dares/secret-missions/${eventId}/completions`),
+  deleteSecretMission: (missionId, ownerPin) =>
+    api.delete(`/dares/secret-mission/${missionId}`, {
+      params: {
+        owner_pin: ownerPin,
+      },
+    }),
   create: (data, ownerPin) =>
     api.post('/dares/', data, {
       params: {

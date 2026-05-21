@@ -10,7 +10,10 @@ from models.dare import (
     DareCreate,
     SecretMission,
     SecretMissionAssign,
+    SecretMissionCompleteRequest,
     SecretMissionCompletion,
+    SecretMissionTemplate,
+    SecretMissionTemplateCreate,
     SpinResult,
     SpinResultCreate,
     SpinnerPair,
@@ -76,6 +79,12 @@ def normalize_secret_mission(mission):
     if mission.get("completed_at") and isinstance(mission["completed_at"], str):
         mission["completed_at"] = datetime.fromisoformat(mission["completed_at"].replace("Z", "+00:00"))
     return mission
+
+
+def normalize_secret_mission_template(template):
+    if isinstance(template.get("created_at"), str):
+        template["created_at"] = datetime.fromisoformat(template["created_at"].replace("Z", "+00:00"))
+    return template
 
 
 @router.get("/", response_model=List[Dare])
@@ -265,6 +274,74 @@ async def create_spin_result(result_input: SpinResultCreate):
     return result
 
 
+@router.get("/secret-mission-templates", response_model=List[SecretMissionTemplate])
+async def get_secret_mission_templates(event_type: Optional[str] = None):
+    query = {"is_active": True}
+    if event_type in ("stag", "hen"):
+        query["event_type"] = {"$in": ["all", event_type]}
+
+    templates = await db.secret_mission_templates.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [normalize_secret_mission_template(template) for template in templates]
+
+
+@router.post("/secret-mission-templates", response_model=SecretMissionTemplate)
+async def create_secret_mission_template(
+    template_input: SecretMissionTemplateCreate,
+    admin_username: Optional[str] = None,
+    admin_password: Optional[str] = None,
+):
+    if not is_global_admin(admin_username, admin_password):
+        raise HTTPException(status_code=403, detail="Only admins can create secret mission templates")
+
+    template = SecretMissionTemplate(
+        text=template_input.text,
+        event_type=template_input.event_type,
+    )
+    template_doc = template.model_dump()
+    template_doc["created_at"] = template_doc["created_at"].isoformat()
+    await db.secret_mission_templates.insert_one(template_doc)
+    return template
+
+
+@router.put("/secret-mission-templates/{template_id}", response_model=SecretMissionTemplate)
+async def update_secret_mission_template(
+    template_id: str,
+    template_input: SecretMissionTemplateCreate,
+    admin_username: Optional[str] = None,
+    admin_password: Optional[str] = None,
+):
+    if not is_global_admin(admin_username, admin_password):
+        raise HTTPException(status_code=403, detail="Only admins can edit secret mission templates")
+
+    existing = await db.secret_mission_templates.find_one({"id": template_id, "is_active": True})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Secret mission template not found")
+
+    await db.secret_mission_templates.update_one(
+        {"id": template_id},
+        {"$set": template_input.model_dump()},
+    )
+    updated = await db.secret_mission_templates.find_one({"id": template_id}, {"_id": 0})
+    return normalize_secret_mission_template(updated)
+
+
+@router.delete("/secret-mission-templates/{template_id}")
+async def delete_secret_mission_template(
+    template_id: str,
+    admin_username: Optional[str] = None,
+    admin_password: Optional[str] = None,
+):
+    if not is_global_admin(admin_username, admin_password):
+        raise HTTPException(status_code=403, detail="Only admins can delete secret mission templates")
+
+    existing = await db.secret_mission_templates.find_one({"id": template_id, "is_active": True})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Secret mission template not found")
+
+    await db.secret_mission_templates.update_one({"id": template_id}, {"$set": {"is_active": False}})
+    return {"message": "Secret mission template deleted successfully"}
+
+
 @router.get("/secret-mission/{event_id}", response_model=Optional[SecretMission])
 async def get_secret_mission(event_id: str, member_name: str):
     mission = await db.secret_missions.find_one(
@@ -272,6 +349,7 @@ async def get_secret_mission(event_id: str, member_name: str):
             "event_id": event_id,
             "member_name": member_name,
             "is_active": True,
+            "is_completed": False,
         },
         {"_id": 0},
     )
@@ -286,21 +364,34 @@ async def assign_secret_mission(mission_input: SecretMissionAssign):
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    existing = await db.secret_missions.find_one(
+    if not mission_input.force_new:
+        existing = await db.secret_missions.find_one(
+            {
+                "event_id": mission_input.event_id,
+                "member_name": mission_input.member_name,
+                "is_active": True,
+                "is_completed": False,
+            },
+            {"_id": 0},
+        )
+        if existing:
+            return normalize_secret_mission(existing)
+
+    event_type = event.get("event_type")
+    templates = await db.secret_mission_templates.find(
         {
-            "event_id": mission_input.event_id,
-            "member_name": mission_input.member_name,
             "is_active": True,
+            "event_type": {"$in": ["all", event_type]} if event_type in ("stag", "hen") else "all",
         },
         {"_id": 0},
-    )
-    if existing:
-        return normalize_secret_mission(existing)
+    ).to_list(500)
+    template_texts = [template.get("text") for template in templates if template.get("text")]
+    mission_text = random.choice(template_texts or SECRET_MISSION_TEMPLATES)
 
     mission = SecretMission(
         event_id=mission_input.event_id,
         member_name=mission_input.member_name,
-        mission_text=random.choice(SECRET_MISSION_TEMPLATES),
+        mission_text=mission_text,
     )
     mission_doc = mission.model_dump()
     mission_doc["created_at"] = mission_doc["created_at"].isoformat()
@@ -309,7 +400,11 @@ async def assign_secret_mission(mission_input: SecretMissionAssign):
 
 
 @router.put("/secret-mission/{mission_id}/complete", response_model=SecretMission)
-async def complete_secret_mission(mission_id: str, member_name: str):
+async def complete_secret_mission(
+    mission_id: str,
+    member_name: str,
+    completion_input: SecretMissionCompleteRequest,
+):
     mission = await db.secret_missions.find_one({"id": mission_id, "is_active": True})
     if not mission:
         raise HTTPException(status_code=404, detail="Mission not found")
@@ -320,7 +415,13 @@ async def complete_secret_mission(mission_id: str, member_name: str):
     completed_at = datetime.utcnow().isoformat()
     await db.secret_missions.update_one(
         {"id": mission_id},
-        {"$set": {"is_completed": True, "completed_at": completed_at}},
+        {
+            "$set": {
+                "is_completed": True,
+                "completed_at": completed_at,
+                "evidence": completion_input.evidence,
+            }
+        },
     )
     updated = await db.secret_missions.find_one({"id": mission_id}, {"_id": 0})
     return normalize_secret_mission(updated)
@@ -335,11 +436,30 @@ async def get_secret_mission_completions(event_id: str):
             "id": 1,
             "event_id": 1,
             "member_name": 1,
+            "mission_text": 1,
+            "evidence": 1,
             "is_completed": 1,
             "completed_at": 1,
         },
     ).sort("completed_at", -1).to_list(100)
     return [normalize_secret_mission(mission) for mission in missions]
+
+
+@router.delete("/secret-mission/{mission_id}")
+async def delete_secret_mission(mission_id: str, owner_pin: str):
+    mission = await db.secret_missions.find_one({"id": mission_id, "is_active": True})
+    if not mission:
+        raise HTTPException(status_code=404, detail="Mission not found")
+
+    event = await db.events.find_one({"id": mission.get("event_id"), "is_active": True})
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    if event.get("owner_pin") != owner_pin:
+        raise HTTPException(status_code=403, detail="Invalid owner PIN")
+
+    await db.secret_missions.update_one({"id": mission_id}, {"$set": {"is_active": False}})
+    return {"message": "Mission deleted successfully"}
 
 
 @router.put("/{dare_id}", response_model=Dare)

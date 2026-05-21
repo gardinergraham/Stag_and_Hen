@@ -30,6 +30,10 @@ const emptySpinnerPairForm = {
   right_color: "#22C55E",
   event_type: "all",
 };
+const emptyMissionForm = {
+  text: "",
+  event_type: "all",
+};
 const dareCategories = [
   { id: "warmup", name: "Warm Up" },
   { id: "photo", name: "Photo Dare" },
@@ -307,6 +311,9 @@ const AdminPage = () => {
   const [spinnerPairs, setSpinnerPairs] = useState([]);
   const [spinnerPairForm, setSpinnerPairForm] = useState(emptySpinnerPairForm);
   const [selectedSpinnerPair, setSelectedSpinnerPair] = useState(null);
+  const [missionTemplates, setMissionTemplates] = useState([]);
+  const [missionForm, setMissionForm] = useState(emptyMissionForm);
+  const [selectedMission, setSelectedMission] = useState(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -316,7 +323,7 @@ const AdminPage = () => {
     setLoading(true);
     setError("");
     try {
-      const [itemsRes, categoriesRes, requestsRes, daresRes, spinnerPairsRes] = await Promise.all([
+      const [itemsRes, categoriesRes, requestsRes, daresRes, spinnerPairsRes, missionTemplatesRes] = await Promise.all([
         axios.get(`${API_BASE_URL}/shop/items`),
         axios.get(`${API_BASE_URL}/shop/categories`),
         axios.get(`${API_BASE_URL}/shop-requests/`, {
@@ -335,12 +342,14 @@ const AdminPage = () => {
             include_event: false,
           },
         }),
+        axios.get(`${API_BASE_URL}/dares/secret-mission-templates`),
       ]);
       setItems(itemsRes.data);
       setCategories(categoriesRes.data.categories);
       setRequests(requestsRes.data);
       setDares(daresRes.data);
       setSpinnerPairs(spinnerPairsRes.data);
+      setMissionTemplates(missionTemplatesRes.data);
     } catch (err) {
       setError(err.response?.data?.detail || "Could not load admin data.");
     } finally {
@@ -364,6 +373,10 @@ const AdminPage = () => {
 
   const updateSpinnerPairForm = (key, value) => {
     setSpinnerPairForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const updateMissionForm = (key, value) => {
+    setMissionForm((current) => ({ ...current, [key]: value }));
   };
 
   const getAdminParams = () => ({
@@ -393,6 +406,13 @@ const AdminPage = () => {
     setStatus("");
   };
 
+  const resetMissionForm = () => {
+    setSelectedMission(null);
+    setMissionForm(emptyMissionForm);
+    setError("");
+    setStatus("");
+  };
+
   const selectDare = (dare) => {
     setSelectedDare(dare);
     setDareForm({
@@ -415,6 +435,16 @@ const AdminPage = () => {
       left_color: pair.left_color || "#00B7FF",
       right_color: pair.right_color || "#22C55E",
       event_type: pair.event_type || "all",
+    });
+    setError("");
+    setStatus("");
+  };
+
+  const selectMission = (mission) => {
+    setSelectedMission(mission);
+    setMissionForm({
+      text: mission.text || "",
+      event_type: mission.event_type || "all",
     });
     setError("");
     setStatus("");
@@ -708,6 +738,71 @@ const AdminPage = () => {
       await loadShopData();
     } catch (err) {
       setError(err.response?.data?.detail || "Could not delete this spinner choice.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleMissionSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setStatus("");
+
+    if (!missionForm.text.trim()) {
+      setError("Please add the secret mission text.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        text: missionForm.text.trim(),
+        event_type: missionForm.event_type,
+      };
+
+      if (selectedMission) {
+        await axios.put(`${API_BASE_URL}/dares/secret-mission-templates/${selectedMission.id}`, payload, {
+          params: getAdminParams(),
+        });
+        setStatus("Secret mission updated.");
+      } else {
+        await axios.post(`${API_BASE_URL}/dares/secret-mission-templates`, payload, {
+          params: getAdminParams(),
+        });
+        setStatus("Secret mission added to the app.");
+      }
+
+      setSelectedMission(null);
+      setMissionForm(emptyMissionForm);
+      await loadShopData();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Could not save this secret mission.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleMissionDelete = async (mission) => {
+    const confirmed = window.confirm(`Delete this secret mission?\n\n"${mission.text}"`);
+    if (!confirmed) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      await axios.delete(`${API_BASE_URL}/dares/secret-mission-templates/${mission.id}`, {
+        params: getAdminParams(),
+      });
+      if (selectedMission?.id === mission.id) {
+        setSelectedMission(null);
+        setMissionForm(emptyMissionForm);
+      }
+      setStatus("Secret mission deleted.");
+      await loadShopData();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Could not delete this secret mission.");
     } finally {
       setSaving(false);
     }
@@ -1141,6 +1236,85 @@ const AdminPage = () => {
                   </button>
                   <div className="admin-product-actions">
                     <button type="button" onClick={() => handleSpinnerPairDelete(pair)} aria-label="Delete spinner choice">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </aside>
+      </section>
+
+      <section className="admin-layout admin-dares-section">
+        <form className="admin-card admin-form" onSubmit={handleMissionSubmit}>
+          <div className="admin-card-header">
+            {selectedMission ? <Save size={20} /> : <Plus size={20} />}
+            <div>
+              <p>{selectedMission ? "Editing Mission" : "New Mission"}</p>
+              <h1>{selectedMission ? "Update Secret Mission" : "Add Secret Mission"}</h1>
+            </div>
+          </div>
+
+          <label>
+            Mission Text
+            <textarea
+              value={missionForm.text}
+              onChange={(event) => updateMissionForm("text", event.target.value)}
+              placeholder="e.g., Make someone say pineapple without telling them why."
+              rows={4}
+            />
+          </label>
+
+          <label>
+            Event Type
+            <select
+              value={missionForm.event_type}
+              onChange={(event) => updateMissionForm("event_type", event.target.value)}
+            >
+              <option value="all">All</option>
+              <option value="stag">Stag</option>
+              <option value="hen">Hen</option>
+            </select>
+          </label>
+
+          <div className="admin-form-actions">
+            <button className="btn btn-primary admin-submit" type="submit" disabled={saving}>
+              {selectedMission ? <Save size={18} /> : <Plus size={18} />}
+              {saving ? "Saving" : selectedMission ? "Update Mission" : "Add Mission"}
+            </button>
+            {selectedMission && (
+              <button className="btn btn-secondary admin-submit" type="button" onClick={resetMissionForm}>
+                <X size={18} />
+                Cancel Edit
+              </button>
+            )}
+          </div>
+        </form>
+
+        <aside className="admin-card admin-preview">
+          <div className="admin-card-header">
+            <ClipboardList size={20} />
+            <div>
+              <p>Secret Missions</p>
+              <h2>{missionTemplates.length} Missions</h2>
+            </div>
+          </div>
+          <div className="admin-product-list admin-dare-list">
+            {missionTemplates.length === 0 ? (
+              <p className="admin-empty-text">No secret missions have been added yet.</p>
+            ) : (
+              missionTemplates.map((mission) => (
+                <article
+                  className={`admin-product-row ${selectedMission?.id === mission.id ? "admin-product-row-selected" : ""}`}
+                  key={mission.id}
+                >
+                  <button className="admin-request-main" type="button" onClick={() => selectMission(mission)}>
+                    <h3>{mission.text}</h3>
+                    <p>{mission.event_type}</p>
+                  </button>
+                  <div className="admin-product-actions">
+                    <button type="button" onClick={() => handleMissionDelete(mission)} aria-label="Delete secret mission">
                       <Trash2 size={16} />
                     </button>
                   </div>

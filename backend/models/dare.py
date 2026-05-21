@@ -86,6 +86,26 @@ class SpinResult(BaseModel):
 class SecretMissionAssign(BaseModel):
     event_id: str = Field(..., min_length=1)
     member_name: str = Field(..., min_length=1, max_length=80)
+    force_new: bool = Field(default=False)
+
+
+class SecretMissionCompleteRequest(BaseModel):
+    evidence: Optional[str] = Field(default=None, max_length=500)
+
+
+class SecretMissionTemplateCreate(BaseModel):
+    text: str = Field(..., min_length=3, max_length=220)
+    event_type: DareEventType = Field(default="all")
+
+
+class SecretMissionTemplate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    text: str
+    event_type: DareEventType = "all"
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class SecretMission(BaseModel):
@@ -95,6 +115,7 @@ class SecretMission(BaseModel):
     event_id: str
     member_name: str
     mission_text: str
+    evidence: Optional[str] = None
     is_completed: bool = Field(default=False)
     completed_at: Optional[datetime] = None
     is_active: bool = Field(default=True)
@@ -107,5 +128,7 @@ class SecretMissionCompletion(BaseModel):
     id: str
     event_id: str
     member_name: str
+    mission_text: str
+    evidence: Optional[str] = None
     is_completed: bool
     completed_at: Optional[datetime] = None

@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone
 import stripe
 
-from models.payment import EventCheckoutCreate, EventCheckoutResponse
+from models.payment import EventCheckoutCreate, EventCheckoutResponse, EventPaymentStatusResponse
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
@@ -32,6 +32,62 @@ def get_tier_price_id(tier: str) -> str:
     return price_id
 
 
+async def mark_event_paid(event_id: str, session) -> None:
+    await db.events.update_one(
+        {"id": event_id},
+        {
+            "$set": {
+                "payment_status": "paid",
+                "stripe_checkout_session_id": session.get("id"),
+                "stripe_payment_intent": session.get("payment_intent"),
+                "paid_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+    )
+
+
+async def sync_event_payment_status(event: dict) -> str:
+    if event.get("payment_status") == "paid":
+        return "paid"
+
+    checkout_session_id = event.get("stripe_checkout_session_id")
+    if not stripe.api_key or not checkout_session_id:
+        return event.get("payment_status", "pending")
+
+    try:
+        session = stripe.checkout.Session.retrieve(checkout_session_id)
+    except Exception:
+        return event.get("payment_status", "pending")
+
+    if session.get("payment_status") == "paid" or session.get("status") == "complete":
+        await mark_event_paid(event["id"], session)
+        return "paid"
+
+    if session.get("status") == "expired":
+        await db.events.update_one(
+            {"id": event["id"]},
+            {"$set": {"payment_status": "failed", "updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+        return "failed"
+
+    return event.get("payment_status", "pending")
+
+
+@router.get("/event-status/{event_id}", response_model=EventPaymentStatusResponse)
+async def get_event_payment_status(event_id: str, owner_pin: str):
+    event = await db.events.find_one({"id": event_id, "owner_pin": owner_pin, "is_active": True})
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found or owner PIN is invalid.")
+
+    payment_status = await sync_event_payment_status(event)
+    return EventPaymentStatusResponse(
+        event_id=event_id,
+        payment_status=payment_status,
+        checkout_session_id=event.get("stripe_checkout_session_id"),
+    )
+
+
 @router.post("/event-checkout", response_model=EventCheckoutResponse)
 async def create_event_checkout(checkout_input: EventCheckoutCreate):
     if not stripe.api_key:
@@ -45,8 +101,26 @@ async def create_event_checkout(checkout_input: EventCheckoutCreate):
     if not event:
         raise HTTPException(status_code=404, detail="Event not found or owner PIN is invalid.")
 
-    if event.get("payment_status") == "paid":
-        raise HTTPException(status_code=400, detail="This event has already been paid for.")
+    payment_status = await sync_event_payment_status(event)
+    if payment_status == "paid":
+        return EventCheckoutResponse(
+            checkout_url="",
+            checkout_session_id=event.get("stripe_checkout_session_id") or "",
+            payment_status="paid",
+        )
+
+    existing_session_id = event.get("stripe_checkout_session_id")
+    if existing_session_id:
+        try:
+            existing_session = stripe.checkout.Session.retrieve(existing_session_id)
+            if existing_session.get("status") == "open" and existing_session.get("url"):
+                return EventCheckoutResponse(
+                    checkout_url=existing_session.url,
+                    checkout_session_id=existing_session.id,
+                    payment_status=payment_status,
+                )
+        except Exception:
+            pass
 
     price_id = get_tier_price_id(event.get("event_tier", "prime"))
     public_url = get_app_public_url()
@@ -108,18 +182,7 @@ async def stripe_webhook(request: Request):
         session = event["data"]["object"]
         event_id = session.get("metadata", {}).get("event_id") or session.get("client_reference_id")
         if event_id:
-            await db.events.update_one(
-                {"id": event_id},
-                {
-                    "$set": {
-                        "payment_status": "paid",
-                        "stripe_checkout_session_id": session.get("id"),
-                        "stripe_payment_intent": session.get("payment_intent"),
-                        "paid_at": datetime.now(timezone.utc).isoformat(),
-                        "updated_at": datetime.now(timezone.utc).isoformat(),
-                    }
-                },
-            )
+            await mark_event_paid(event_id, session)
     elif event["type"] in {"checkout.session.expired", "payment_intent.payment_failed"}:
         session = event["data"]["object"]
         event_id = session.get("metadata", {}).get("event_id") or session.get("client_reference_id")

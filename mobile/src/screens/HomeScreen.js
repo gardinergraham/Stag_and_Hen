@@ -13,6 +13,7 @@ import {
   TextInput as NativeTextInput,
   Linking,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, typography, spacing, getEventTheme } from '../theme';
 import { Card, Button } from '../components';
 import { eventsApi, kittyApi, pointsApi, paymentsApi } from '../services/api';
@@ -35,7 +36,7 @@ const HomeScreen = ({ navigation }) => {
   const [deletingData, setDeletingData] = useState(false);
   const [startingCheckout, setStartingCheckout] = useState(false);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (isPreview) {
       setEvent({
         event_name: session.event_name,
@@ -67,14 +68,25 @@ const HomeScreen = ({ navigation }) => {
         eventsApi.getMembers(session.event_id),
         pointsApi.getLeaderboard(session.event_id),
       ]);
-      setEvent(eventRes.data);
-      const sessionUpdates = {};
-      if (eventRes.data?.payment_status && eventRes.data.payment_status !== session.payment_status) {
-        sessionUpdates.payment_status = eventRes.data.payment_status;
+      const nextEvent = { ...eventRes.data };
+      if (isOwner && session?.owner_pin && nextEvent.payment_status !== 'paid') {
+        try {
+          const paymentRes = await paymentsApi.getEventStatus(session.event_id, session.owner_pin);
+          if (paymentRes.data?.payment_status) {
+            nextEvent.payment_status = paymentRes.data.payment_status;
+          }
+        } catch (paymentError) {
+          console.log('Could not refresh payment status:', paymentError?.response?.data || paymentError.message);
+        }
       }
-      if (eventRes.data?.event_date && eventRes.data.event_date !== session.event_date) {
-        sessionUpdates.event_date = eventRes.data.event_date;
-        sessionUpdates.event_end_date = eventRes.data.event_end_date;
+      setEvent(nextEvent);
+      const sessionUpdates = {};
+      if (nextEvent.payment_status && nextEvent.payment_status !== session.payment_status) {
+        sessionUpdates.payment_status = nextEvent.payment_status;
+      }
+      if (nextEvent.event_date && nextEvent.event_date !== session.event_date) {
+        sessionUpdates.event_date = nextEvent.event_date;
+        sessionUpdates.event_end_date = nextEvent.event_end_date;
       }
       if (Object.keys(sessionUpdates).length > 0) {
         await updateSession(sessionUpdates);
@@ -85,11 +97,17 @@ const HomeScreen = ({ navigation }) => {
     } catch (error) {
       console.error('Failed to load data:', error);
     }
-  };
+  }, [isPreview, isOwner, session]);
 
   useEffect(() => {
     loadData();
-  }, [session.event_id]);
+  }, [loadData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -174,6 +192,12 @@ const HomeScreen = ({ navigation }) => {
         owner_pin: session.owner_pin,
       });
       const checkoutUrl = response.data?.checkout_url;
+      if (response.data?.payment_status === 'paid') {
+        await updateSession({ payment_status: 'paid' });
+        await loadData();
+        Alert.alert('Payment Complete', 'This event has already been paid for.');
+        return;
+      }
       if (checkoutUrl) {
         await Linking.openURL(checkoutUrl);
       }

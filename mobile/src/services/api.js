@@ -167,6 +167,12 @@ export const pointsApi = {
 // Payments API
 export const paymentsApi = {
   createEventCheckout: (data) => api.post('/payments/event-checkout', data),
+  getEventStatus: (eventId, ownerPin) =>
+    api.get(`/payments/event-status/${eventId}`, {
+      params: {
+        owner_pin: ownerPin,
+      },
+    }),
 };
 
 // Session Storage

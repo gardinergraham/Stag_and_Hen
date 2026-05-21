@@ -45,6 +45,14 @@ def stripe_metadata(obj) -> dict:
     return dict(metadata)
 
 
+def stripe_list_data(obj):
+    if obj is None:
+        return []
+    if isinstance(obj, dict):
+        return obj.get("data", [])
+    return getattr(obj, "data", [])
+
+
 async def mark_event_paid(event_id: str, session) -> None:
     await db.events.update_one(
         {"id": event_id},
@@ -66,7 +74,7 @@ async def find_recent_paid_session_for_event(event_id: str):
     except Exception:
         return None
 
-    for session in sessions.get("data", []):
+    for session in stripe_list_data(sessions):
         metadata = stripe_metadata(session)
         if (
             metadata.get("event_id") == event_id

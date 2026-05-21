@@ -197,18 +197,29 @@ const CreateEventScreen = ({ navigation }) => {
         payment_status: event.payment_status,
       });
 
-      const checkoutResponse = await paymentsApi.createEventCheckout({
-        event_id: event.id,
-        owner_pin: event.owner_pin,
-      });
-      const checkoutUrl = checkoutResponse.data?.checkout_url;
-      if (checkoutUrl) {
-        await Linking.openURL(checkoutUrl);
+      let checkoutStarted = false;
+      try {
+        const checkoutResponse = await paymentsApi.createEventCheckout({
+          event_id: event.id,
+          owner_pin: event.owner_pin,
+        });
+        const checkoutUrl = checkoutResponse.data?.checkout_url;
+        if (checkoutUrl) {
+          checkoutStarted = true;
+          await Linking.openURL(checkoutUrl);
+        }
+      } catch (checkoutError) {
+        Alert.alert(
+          'Event Created',
+          checkoutError.response?.data?.detail
+            ? `Your event was created, but Stripe Checkout could not start yet.\n\n${checkoutError.response.data.detail}\n\nYou can retry from the Home screen.`
+            : 'Your event was created, but Stripe Checkout could not start yet. You can retry from the Home screen.'
+        );
       }
 
       Alert.alert(
-        'Event Created - Payment Started',
-        `Your ${form.event_type === 'stag' ? 'Stag Do' : 'Hen Party'} has been created and Stripe Checkout has opened.\n\nPackage: £${event.event_tier_price?.toFixed?.(2) || form.event_tier_price.toFixed(2)}\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nKeep these safe!`,
+        checkoutStarted ? 'Event Created - Payment Started' : 'Event Created',
+        `Your ${form.event_type === 'stag' ? 'Stag Do' : 'Hen Party'} has been created${checkoutStarted ? ' and Stripe Checkout has opened' : ''}.\n\nPackage: £${event.event_tier_price?.toFixed?.(2) || form.event_tier_price.toFixed(2)}\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nKeep these safe!`,
         [
           {
             text: 'Show QR Code',

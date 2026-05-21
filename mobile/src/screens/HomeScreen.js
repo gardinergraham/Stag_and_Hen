@@ -12,6 +12,7 @@ import {
   Modal,
   TextInput as NativeTextInput,
   Linking,
+  AppState,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, typography, spacing, getEventTheme } from '../theme';
@@ -109,6 +110,15 @@ const HomeScreen = ({ navigation }) => {
     }, [loadData])
   );
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        loadData();
+      }
+    });
+    return () => subscription.remove();
+  }, [loadData]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadData();
@@ -202,7 +212,8 @@ const HomeScreen = ({ navigation }) => {
         await Linking.openURL(checkoutUrl);
       }
     } catch (error) {
-      Alert.alert('Payment Error', error?.response?.data?.detail || 'Could not start Stripe Checkout.');
+      const detail = error?.response?.data?.detail || error?.message || 'Could not start Stripe Checkout.';
+      Alert.alert('Payment Error', detail);
     } finally {
       setStartingCheckout(false);
     }

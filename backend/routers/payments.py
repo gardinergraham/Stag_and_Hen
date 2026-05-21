@@ -32,14 +32,27 @@ def get_tier_price_id(tier: str) -> str:
     return price_id
 
 
+def stripe_value(obj, key, default=None):
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def stripe_metadata(obj) -> dict:
+    metadata = stripe_value(obj, "metadata", {}) or {}
+    return dict(metadata)
+
+
 async def mark_event_paid(event_id: str, session) -> None:
     await db.events.update_one(
         {"id": event_id},
         {
             "$set": {
                 "payment_status": "paid",
-                "stripe_checkout_session_id": session.get("id"),
-                "stripe_payment_intent": session.get("payment_intent"),
+                "stripe_checkout_session_id": stripe_value(session, "id"),
+                "stripe_payment_intent": stripe_value(session, "payment_intent"),
                 "paid_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -47,24 +60,51 @@ async def mark_event_paid(event_id: str, session) -> None:
     )
 
 
+async def find_recent_paid_session_for_event(event_id: str):
+    try:
+        sessions = stripe.checkout.Session.list(limit=100)
+    except Exception:
+        return None
+
+    for session in sessions.get("data", []):
+        metadata = stripe_metadata(session)
+        if (
+            metadata.get("event_id") == event_id
+            or stripe_value(session, "client_reference_id") == event_id
+        ) and (
+            stripe_value(session, "payment_status") == "paid"
+            or stripe_value(session, "status") == "complete"
+        ):
+            return session
+    return None
+
+
 async def sync_event_payment_status(event: dict) -> str:
     if event.get("payment_status") == "paid":
         return "paid"
 
+    if not stripe.api_key:
+        return event.get("payment_status", "pending")
+
     checkout_session_id = event.get("stripe_checkout_session_id")
-    if not stripe.api_key or not checkout_session_id:
+    session = None
+    if checkout_session_id:
+        try:
+            session = stripe.checkout.Session.retrieve(checkout_session_id)
+        except Exception:
+            session = None
+
+    if not session:
+        session = await find_recent_paid_session_for_event(event["id"])
+
+    if not session:
         return event.get("payment_status", "pending")
 
-    try:
-        session = stripe.checkout.Session.retrieve(checkout_session_id)
-    except Exception:
-        return event.get("payment_status", "pending")
-
-    if session.get("payment_status") == "paid" or session.get("status") == "complete":
+    if stripe_value(session, "payment_status") == "paid" or stripe_value(session, "status") == "complete":
         await mark_event_paid(event["id"], session)
         return "paid"
 
-    if session.get("status") == "expired":
+    if stripe_value(session, "status") == "expired":
         await db.events.update_one(
             {"id": event["id"]},
             {"$set": {"payment_status": "failed", "updated_at": datetime.now(timezone.utc).isoformat()}},
@@ -113,10 +153,20 @@ async def create_event_checkout(checkout_input: EventCheckoutCreate):
     if existing_session_id:
         try:
             existing_session = stripe.checkout.Session.retrieve(existing_session_id)
-            if existing_session.get("status") == "open" and existing_session.get("url"):
+            if (
+                stripe_value(existing_session, "payment_status") == "paid"
+                or stripe_value(existing_session, "status") == "complete"
+            ):
+                await mark_event_paid(event["id"], existing_session)
                 return EventCheckoutResponse(
-                    checkout_url=existing_session.url,
-                    checkout_session_id=existing_session.id,
+                    checkout_url="",
+                    checkout_session_id=stripe_value(existing_session, "id", ""),
+                    payment_status="paid",
+                )
+            if stripe_value(existing_session, "status") == "open" and stripe_value(existing_session, "url"):
+                return EventCheckoutResponse(
+                    checkout_url=stripe_value(existing_session, "url"),
+                    checkout_session_id=stripe_value(existing_session, "id"),
                     payment_status=payment_status,
                 )
         except Exception:
@@ -180,12 +230,14 @@ async def stripe_webhook(request: Request):
 
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
-        event_id = session.get("metadata", {}).get("event_id") or session.get("client_reference_id")
+        metadata = stripe_metadata(session)
+        event_id = metadata.get("event_id") or stripe_value(session, "client_reference_id")
         if event_id:
             await mark_event_paid(event_id, session)
     elif event["type"] in {"checkout.session.expired", "payment_intent.payment_failed"}:
         session = event["data"]["object"]
-        event_id = session.get("metadata", {}).get("event_id") or session.get("client_reference_id")
+        metadata = stripe_metadata(session)
+        event_id = metadata.get("event_id") or stripe_value(session, "client_reference_id")
         if event_id:
             await db.events.update_one(
                 {"id": event_id},

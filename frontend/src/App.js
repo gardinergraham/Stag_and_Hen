@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
-import { Camera, Users, ShoppingBag, Wallet, QrCode, Shield, PartyPopper, Heart, Check, Smartphone, Apple, Plus, RefreshCw, Lock, ExternalLink, Save, Trash2, X, ClipboardList } from "lucide-react";
+import { Camera, Users, ShoppingBag, Wallet, QrCode, Shield, PartyPopper, Heart, Check, Smartphone, Apple, Plus, RefreshCw, Lock, ExternalLink, Save, Trash2, X, ClipboardList, Trophy, Gamepad2, Video, Target } from "lucide-react";
 import "@/App.css";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "https://stagandhen-production.up.railway.app";
@@ -139,6 +139,21 @@ const Features = () => {
       icon: <Shield />,
       title: "What Happens... Stays",
       description: "Your media, your rules. Auto-delete ensures those wild memories stay within the crew."
+    },
+    {
+      icon: <Gamepad2 />,
+      title: "Party Games Hub",
+      description: "Dares, spinner choices, photo challenges, drinking games, and secret missions keep the whole group involved."
+    },
+    {
+      icon: <Video />,
+      title: "Messages & Advice",
+      description: "Capture keepsake video messages, future wishes, memories, and advice for the bride or groom."
+    },
+    {
+      icon: <Trophy />,
+      title: "Prize Points",
+      description: "Award crew points for missions, dares, photo proof, and best moments, then crown a winner at the end."
     }
   ];
 
@@ -185,6 +200,9 @@ const AppPreview = () => (
             <li><Check size={20} /> Set auto-delete timers for sensitive content</li>
             <li><Check size={20} /> Collect money in the group kitty</li>
             <li><Check size={20} /> Shop for party essentials together</li>
+            <li><Check size={20} /> Play dares, spinner rounds, photo challenges and drinking games</li>
+            <li><Check size={20} /> Give secret missions and award prize points</li>
+            <li><Check size={20} /> Record video messages and advice for the bride or groom</li>
           </ul>
           <a href="#download" className="btn btn-gold" data-testid="get-started-btn">
             <Heart size={20} />
@@ -196,9 +214,28 @@ const AppPreview = () => (
             <div className="phone-screen">
               <div className="phone-notch"></div>
               <div className="phone-content">
-                <img src="/logo.jpg" alt="Stag & Hen App" />
-                <h4>The Stag & Hen</h4>
-                <p style={{ color: 'var(--color-gold)' }}>Last Stop Before The Altar</p>
+                <div className="phone-app-header">
+                  <img src="/logo.jpg" alt="Stag & Hen App" />
+                  <div>
+                    <h4>Preview Party Weekend</h4>
+                    <p>Hen Party</p>
+                  </div>
+                </div>
+                <div className="phone-balance-card">
+                  <span>Kitty Balance</span>
+                  <strong>£185.00</strong>
+                </div>
+                <div className="phone-game-grid">
+                  <div><Target size={18} />Dares</div>
+                  <div><Gamepad2 size={18} />Spinner</div>
+                  <div><Video size={18} />Messages</div>
+                  <div><Trophy size={18} />Points</div>
+                </div>
+                <div className="phone-leaderboard">
+                  <span>Prize Points</span>
+                  <p><strong>55</strong> Best Mate</p>
+                  <p><strong>35</strong> Maid of Honour</p>
+                </div>
               </div>
             </div>
           </div>

@@ -9,10 +9,12 @@ import {
   TouchableOpacity,
   Image,
   Alert,
+  Modal,
+  TextInput as NativeTextInput,
 } from 'react-native';
 import { colors, typography, spacing, getEventTheme } from '../theme';
 import { Card, Button } from '../components';
-import { eventsApi, kittyApi } from '../services/api';
+import { eventsApi, kittyApi, pointsApi } from '../services/api';
 import { useApp } from '../context/AppContext';
 import { formatEventDateRange, getCountdownLabel, getCountdownParts } from '../utils/eventDates';
 
@@ -23,6 +25,12 @@ const HomeScreen = ({ navigation }) => {
   const [event, setEvent] = useState(null);
   const [kittyBalance, setKittyBalance] = useState(0);
   const [members, setMembers] = useState([]);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [awardModalVisible, setAwardModalVisible] = useState(false);
+  const [selectedAwardMember, setSelectedAwardMember] = useState(null);
+  const [awardPoints, setAwardPoints] = useState('10');
+  const [awardReason, setAwardReason] = useState('');
+  const [awardingPoints, setAwardingPoints] = useState(false);
 
   const loadData = async () => {
     if (isPreview) {
@@ -35,19 +43,26 @@ const HomeScreen = ({ navigation }) => {
       });
       setKittyBalance(185);
       setMembers([
-        { id: 'preview-owner', name: 'Graham', role: 'owner' },
-        { id: 'preview-1', name: 'Maid of Honour', role: 'crew' },
-        { id: 'preview-2', name: 'Best Mate', role: 'crew' },
-        { id: 'preview-3', name: 'The Crew', role: 'crew' },
+        { id: 'preview-owner', name: 'Graham', role: 'owner', points: 0 },
+        { id: 'preview-1', name: 'Maid of Honour', role: 'crew', points: 35 },
+        { id: 'preview-2', name: 'Best Mate', role: 'crew', points: 55 },
+        { id: 'preview-3', name: 'The Crew', role: 'crew', points: 20 },
+      ]);
+      setLeaderboard([
+        { member_name: 'Best Mate', role: 'crew', points: 55 },
+        { member_name: 'Maid of Honour', role: 'crew', points: 35 },
+        { member_name: 'The Crew', role: 'crew', points: 20 },
+        { member_name: 'Graham', role: 'owner', points: 0 },
       ]);
       return;
     }
 
     try {
-      const [eventRes, kittyRes, membersRes] = await Promise.all([
+      const [eventRes, kittyRes, membersRes, leaderboardRes] = await Promise.all([
         eventsApi.getById(session.event_id),
         kittyApi.getBalance(session.event_id),
         eventsApi.getMembers(session.event_id),
+        pointsApi.getLeaderboard(session.event_id),
       ]);
       setEvent(eventRes.data);
       if (eventRes.data?.event_date && eventRes.data.event_date !== session.event_date) {
@@ -58,6 +73,7 @@ const HomeScreen = ({ navigation }) => {
       }
       setKittyBalance(kittyRes.data.balance);
       setMembers(membersRes.data);
+      setLeaderboard(Array.isArray(leaderboardRes.data) ? leaderboardRes.data : []);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
@@ -91,6 +107,53 @@ const HomeScreen = ({ navigation }) => {
   const eventDate = event?.event_date || session.event_date;
   const eventEndDate = event?.event_end_date || session.event_end_date;
   const countdown = getCountdownParts(eventDate);
+  const pointsByName = leaderboard.reduce((acc, entry) => {
+    acc[entry.member_name] = entry.points;
+    return acc;
+  }, {});
+
+  const openAwardModal = (member) => {
+    if (isPreview) {
+      Alert.alert('Preview Mode', 'Create an event to award real crew points.');
+      return;
+    }
+    setSelectedAwardMember(member);
+    setAwardPoints('10');
+    setAwardReason('');
+    setAwardModalVisible(true);
+  };
+
+  const awardCrewPoints = async () => {
+    const parsedPoints = Number.parseInt(awardPoints, 10);
+    if (!selectedAwardMember || !Number.isFinite(parsedPoints) || parsedPoints <= 0) {
+      Alert.alert('Points Needed', 'Add a positive number of points.');
+      return;
+    }
+    if (!awardReason.trim()) {
+      Alert.alert('Reason Needed', 'Add what the points are for.');
+      return;
+    }
+
+    setAwardingPoints(true);
+    try {
+      await pointsApi.award(
+        {
+          event_id: session.event_id,
+          member_name: selectedAwardMember.name,
+          points: parsedPoints,
+          reason: awardReason.trim(),
+        },
+        session.owner_pin
+      );
+      setAwardModalVisible(false);
+      await loadData();
+      Alert.alert('Points Awarded', `${selectedAwardMember.name} received ${parsedPoints} points.`);
+    } catch (error) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Could not award points.');
+    } finally {
+      setAwardingPoints(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -203,7 +266,7 @@ const HomeScreen = ({ navigation }) => {
             onPress={() => navigation.navigate('Dares')}
           >
             <Text style={styles.actionIcon}>🎯</Text>
-            <Text style={styles.actionLabel}>Dares</Text>
+            <Text style={styles.actionLabel}>Games</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionCard, { backgroundColor: `${colors.gold}20` }]}
@@ -223,6 +286,35 @@ const HomeScreen = ({ navigation }) => {
           )}
         </View>
 
+        <Text style={styles.sectionTitle}>Prize Points</Text>
+        <Card style={[styles.pointsCard, { borderColor: `${theme.accent}55` }]}>
+          <Card.Content>
+            <View style={styles.pointsHeader}>
+              <View>
+                <Text style={[styles.pointsEyebrow, { color: theme.accent }]}>Leaderboard</Text>
+                <Text style={styles.pointsTitle}>End of party prize</Text>
+              </View>
+              <Text style={styles.pointsIcon}>🏆</Text>
+            </View>
+            {leaderboard.length === 0 ? (
+              <Text style={styles.pointsHint}>Award points for missions, dares, photo proof, and best moments.</Text>
+            ) : (
+              leaderboard.slice(0, 5).map((entry, index) => (
+                <View key={entry.member_name} style={styles.leaderboardRow}>
+                  <Text style={[styles.leaderboardRank, { color: theme.accent }]}>#{index + 1}</Text>
+                  <View style={styles.leaderboardNameWrap}>
+                    <Text style={styles.leaderboardName}>{entry.member_name}</Text>
+                    <Text style={styles.leaderboardRole}>
+                      {entry.role === 'owner' ? 'Organizer' : entry.role === 'guest_of_honour' ? 'Guest of honour' : 'Crew'}
+                    </Text>
+                  </View>
+                  <Text style={styles.leaderboardPoints}>{entry.points} pts</Text>
+                </View>
+              ))
+            )}
+          </Card.Content>
+        </Card>
+
         {/* Crew Members */}
         <Text style={styles.sectionTitle}>The Crew</Text>
         <Card>
@@ -235,14 +327,66 @@ const HomeScreen = ({ navigation }) => {
                   </Text>
                 </View>
                 <Text style={styles.memberName}>{member.name}</Text>
+                <Text style={[styles.memberPoints, { color: theme.accent }]}>
+                  {pointsByName[member.name] || member.points || 0} pts
+                </Text>
                 {member.role === 'owner' && (
                   <Text style={styles.ownerBadge}>👑 Organizer</Text>
+                )}
+                {isOwner && member.role !== 'owner' && (
+                  <TouchableOpacity style={[styles.awardButton, { borderColor: theme.accent }]} onPress={() => openAwardModal(member)}>
+                    <Text style={[styles.awardButtonText, { color: theme.accent }]}>Award</Text>
+                  </TouchableOpacity>
                 )}
               </View>
             ))}
           </Card.Content>
         </Card>
       </ScrollView>
+
+      <Modal visible={awardModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Award Points</Text>
+            <Text style={styles.modalSubtitle}>{selectedAwardMember?.name}</Text>
+            <Text style={styles.inputLabel}>Points</Text>
+            <NativeTextInput
+              value={awardPoints}
+              onChangeText={setAwardPoints}
+              keyboardType="number-pad"
+              style={styles.modalInput}
+              placeholder="10"
+              placeholderTextColor={colors.textMuted}
+            />
+            <Text style={styles.inputLabel}>Reason</Text>
+            <NativeTextInput
+              value={awardReason}
+              onChangeText={setAwardReason}
+              style={[styles.modalInput, styles.reasonInput]}
+              placeholder="Best photo proof, mission completed, funniest moment..."
+              placeholderTextColor={colors.textMuted}
+              multiline
+            />
+            <View style={styles.modalActions}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                color={theme.accent}
+                onPress={() => setAwardModalVisible(false)}
+                style={styles.modalButton}
+              />
+              <Button
+                title="Award"
+                variant="primary"
+                color={theme.accent}
+                loading={awardingPoints}
+                onPress={awardCrewPoints}
+                style={styles.modalButton}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -399,6 +543,60 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: spacing.md,
   },
+  pointsCard: {
+    marginBottom: spacing.xl,
+    borderWidth: 1,
+  },
+  pointsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  pointsEyebrow: {
+    ...typography.caption,
+    textTransform: 'uppercase',
+    fontWeight: '700',
+  },
+  pointsTitle: {
+    ...typography.h3,
+    color: colors.text,
+    marginTop: spacing.xs,
+  },
+  pointsIcon: {
+    fontSize: 30,
+  },
+  pointsHint: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
+  leaderboardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  leaderboardRank: {
+    ...typography.button,
+    width: 38,
+  },
+  leaderboardNameWrap: {
+    flex: 1,
+  },
+  leaderboardName: {
+    ...typography.body,
+    color: colors.text,
+    fontWeight: '700',
+  },
+  leaderboardRole: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  leaderboardPoints: {
+    ...typography.button,
+    color: colors.gold,
+  },
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -446,9 +644,74 @@ const styles = StyleSheet.create({
     color: colors.text,
     flex: 1,
   },
+  memberPoints: {
+    ...typography.caption,
+    marginRight: spacing.sm,
+    fontWeight: '700',
+  },
   ownerBadge: {
     ...typography.caption,
     color: colors.gold,
+  },
+  awardButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  awardButtonText: {
+    ...typography.caption,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalTitle: {
+    ...typography.h2,
+    color: colors.text,
+  },
+  modalSubtitle: {
+    ...typography.body,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    marginBottom: spacing.lg,
+  },
+  inputLabel: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    color: colors.text,
+    backgroundColor: colors.background,
+    marginBottom: spacing.md,
+  },
+  reasonInput: {
+    minHeight: 88,
+    textAlignVertical: 'top',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  modalButton: {
+    flex: 1,
   },
 });
 

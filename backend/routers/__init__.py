@@ -5,6 +5,7 @@ from .shop_requests import router as shop_requests_router
 from .dares import router as dares_router
 from .kitty import router as kitty_router
 from .auth import router as auth_router
+from .points import router as points_router
 
 __all__ = [
     "events_router",
@@ -14,4 +15,5 @@ __all__ = [
     "dares_router",
     "kitty_router",
     "auth_router",
+    "points_router",
 ]

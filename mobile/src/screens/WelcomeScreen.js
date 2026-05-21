@@ -34,8 +34,8 @@ const WelcomeScreen = ({ navigation }) => {
         <Text style={styles.tagline}>Last Stop Before The Altar</Text>
         
         <Text style={styles.description}>
-          Plan the perfect send-off! Share memories, manage your crew, and make sure 
-          everyone has the night (or weekend) of their lives.
+          Plan the perfect send-off! Share memories, manage your crew, play party games,
+          award prize points, and collect video messages for the bride or groom.
         </Text>
       </View>
 
@@ -48,7 +48,7 @@ const WelcomeScreen = ({ navigation }) => {
           style={styles.button}
         />
         <Button
-          title="Preview the App"
+          title="Preview Games & Features"
           variant="primary"
           size="large"
           onPress={handlePreview}

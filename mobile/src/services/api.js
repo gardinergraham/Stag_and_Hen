@@ -144,6 +144,18 @@ export const kittyApi = {
   getTransactions: (eventId) => api.get(`/kitty/transactions/${eventId}`),
 };
 
+// Points API
+export const pointsApi = {
+  getLeaderboard: (eventId) => api.get(`/points/${eventId}/leaderboard`),
+  getAwards: (eventId) => api.get(`/points/${eventId}/awards`),
+  award: (data, ownerPin) =>
+    api.post('/points/award', data, {
+      params: {
+        owner_pin: ownerPin,
+      },
+    }),
+};
+
 // Session Storage
 export const sessionStorage = {
   async saveSession(data) {

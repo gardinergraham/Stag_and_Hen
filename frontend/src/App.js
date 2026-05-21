@@ -309,7 +309,7 @@ const Footer = () => (
             <li><a href="#" data-testid="footer-faq">FAQs</a></li>
             <li><a href="#" data-testid="footer-contact">Contact Us</a></li>
             <li><a href="#" data-testid="footer-privacy">Privacy Policy</a></li>
-            <li><a href="#" data-testid="footer-terms">Terms of Service</a></li>
+            <li><a href="/terms" data-testid="footer-terms">Terms of Service</a></li>
           </ul>
         </div>
         <div className="footer-column">
@@ -342,6 +342,66 @@ const Footer = () => (
       </div>
     </div>
   </footer>
+);
+
+const TermsPage = () => (
+  <div className="App">
+    <Header />
+    <main className="legal-page">
+      <section className="legal-hero">
+        <div className="container">
+          <p className="legal-eyebrow">Legal</p>
+          <h1>Stag & Hen Terms & Conditions</h1>
+          <p>
+            Welcome to Stag & Hen. By accessing or using this platform, you agree to comply
+            with and be bound by the following terms and conditions.
+          </p>
+        </div>
+      </section>
+
+      <section className="legal-content-section">
+        <div className="container legal-content">
+          <article>
+            <h2>1. Event Access</h2>
+            <p>Guests may only access an event using the official event name and access PIN provided by the organiser. Unauthorised access to events or content is strictly prohibited.</p>
+          </article>
+          <article>
+            <h2>2. Uploads and Content</h2>
+            <p>By uploading photos, videos, messages, or other content, you confirm that you have the right to share that content and that it does not contain unlawful, offensive, harmful, or inappropriate material.</p>
+            <p>Stag & Hen and event organisers reserve the right to remove any content at their discretion without notice.</p>
+          </article>
+          <article>
+            <h2>3. Privacy</h2>
+            <p>Content shared within an event is intended only for the organiser and invited participants of that event. Stag & Hen does not sell personal information or share user data with unrelated third parties.</p>
+          </article>
+          <article>
+            <h2>4. User Responsibility</h2>
+            <p>Users are responsible for the content they upload and share. You agree not to use the platform for harassment, abuse, spam, copyright infringement, or unlawful activity.</p>
+          </article>
+          <article>
+            <h2>5. Availability of Service</h2>
+            <p>While we aim to provide a reliable service, Stag & Hen cannot guarantee uninterrupted access at all times. Features, storage limits, or services may change or be updated without notice.</p>
+          </article>
+          <article>
+            <h2>6. Liability</h2>
+            <p>Stag & Hen is not responsible for user-generated content, lost uploads, event disputes, or temporary technical interruptions. Use of the platform is at your own discretion and risk.</p>
+          </article>
+          <article>
+            <h2>7. Removal of Content or Accounts</h2>
+            <p>We reserve the right to suspend or remove access to events, content, or accounts that breach these terms or are deemed harmful to the platform or its users.</p>
+          </article>
+          <article>
+            <h2>8. Drinking Games & Activities Disclaimer</h2>
+            <p>Stag & Hen may include party games, challenges, dares, and social activities that can involve alcoholic or non-alcoholic drinks. Participation in any activity is entirely voluntary and at the user’s own discretion.</p>
+            <p>Users are solely responsible for their own behaviour, safety, wellbeing, and decisions while participating in activities organised through the platform. Stag & Hen does not encourage excessive drinking, dangerous behaviour, illegal activity, or actions that may cause harm to yourself or others.</p>
+            <p>By using the platform, you acknowledge that Stag & Hen accepts no responsibility or liability for any injury, damage, loss, illness, accidents, disputes, or consequences arising from participation in drinking games, challenges, dares, events, or related activities.</p>
+          </article>
+          <p className="legal-updated">Last updated: May 2026</p>
+        </div>
+      </section>
+    </main>
+    <Footer />
+  </div>
 );
 
 const AdminPage = () => {
@@ -1380,6 +1440,9 @@ const AdminPage = () => {
 function App() {
   if (window.location.pathname === "/admin") {
     return <AdminPage />;
+  }
+  if (window.location.pathname === "/terms") {
+    return <TermsPage />;
   }
 
   return (

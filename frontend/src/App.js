@@ -7,6 +7,17 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "https://stagandhen-pro
 const API_BASE_URL = `${BACKEND_URL}/api`;
 const ADMIN_USERNAME = "GrahamAdmin";
 const ADMIN_PASSWORD = "1234";
+const heroBackgrounds = [
+  {
+    src: "/assets/images/henGirlsBack.webp",
+    alt: "Hen party celebration",
+  },
+  {
+    src: "/assets/images/stagBoysBack.webp",
+    alt: "Stag party celebration",
+  },
+];
+const heroBackground = heroBackgrounds[Math.floor(Math.random() * heroBackgrounds.length)];
 const emptyShopForm = {
   name: "",
   description: "",
@@ -64,8 +75,8 @@ const Hero = () => (
   <section className="hero" data-testid="hero-section">
     <div className="hero-background">
       <img 
-        src="https://images.pexels.com/photos/6173843/pexels-photo-6173843.jpeg" 
-        alt="Party celebration" 
+        src={heroBackground.src}
+        alt={heroBackground.alt}
       />
       <div className="hero-overlay"></div>
     </div>

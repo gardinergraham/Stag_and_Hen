@@ -11,7 +11,6 @@ import {
   Alert,
   Modal,
   TextInput as NativeTextInput,
-  Linking,
   AppState,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -20,9 +19,11 @@ import { Card, Button } from '../components';
 import { eventsApi, kittyApi, pointsApi, paymentsApi } from '../services/api';
 import { useApp } from '../context/AppContext';
 import { formatEventDateRange, getCountdownLabel, getCountdownParts } from '../utils/eventDates';
+import { useEventIAPPurchase } from '../hooks/useEventIAPPurchase';
 
 const HomeScreen = ({ navigation }) => {
   const { session, isOwner, logout, updateSession } = useApp();
+  const { purchaseEventPackage, purchaseLoading } = useEventIAPPurchase();
   const isPreview = session?.is_preview;
   const [refreshing, setRefreshing] = useState(false);
   const [event, setEvent] = useState(null);
@@ -197,22 +198,16 @@ const HomeScreen = ({ navigation }) => {
     if (!session?.event_id || !session?.owner_pin) return;
     setStartingCheckout(true);
     try {
-      const response = await paymentsApi.createEventCheckout({
-        event_id: session.event_id,
-        owner_pin: session.owner_pin,
+      await purchaseEventPackage({
+        eventId: session.event_id,
+        ownerPin: session.owner_pin,
+        tier: event?.event_tier || session.event_tier,
       });
-      const checkoutUrl = response.data?.checkout_url;
-      if (response.data?.payment_status === 'paid') {
-        await updateSession({ payment_status: 'paid' });
-        await loadData();
-        Alert.alert('Payment Complete', 'This event has already been paid for.');
-        return;
-      }
-      if (checkoutUrl) {
-        await Linking.openURL(checkoutUrl);
-      }
+      await updateSession({ payment_status: 'paid' });
+      await loadData();
+      Alert.alert('Payment Complete', 'Your event package is active.');
     } catch (error) {
-      const detail = error?.response?.data?.detail || error?.message || 'Could not start Stripe Checkout.';
+      const detail = error?.response?.data?.detail || error?.message || 'Could not complete Apple in-app purchase.';
       Alert.alert('Payment Error', detail);
     } finally {
       setStartingCheckout(false);
@@ -377,13 +372,13 @@ const HomeScreen = ({ navigation }) => {
             <Card.Content>
               <Text style={styles.paymentTitle}>Complete Event Payment</Text>
               <Text style={styles.paymentText}>
-                This event is saved, but payment is still pending. Complete Stripe Checkout to activate the package.
+                This event is saved, but payment is still pending. Complete Apple in-app purchase to activate the package.
               </Text>
               <Button
-                title="Open Stripe Checkout"
+                title="Complete Apple Purchase"
                 variant="primary"
                 color={theme.accent}
-                loading={startingCheckout}
+                loading={startingCheckout || purchaseLoading}
                 onPress={startEventCheckout}
                 style={styles.paymentButton}
               />

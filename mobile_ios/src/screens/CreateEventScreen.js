@@ -8,16 +8,17 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
-  Linking,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, typography, spacing } from '../theme';
 import { Button, TextInput, Card } from '../components';
-import { eventsApi, paymentsApi } from '../services/api';
+import { eventsApi } from '../services/api';
 import { useApp } from '../context/AppContext';
+import { useEventIAPPurchase } from '../hooks/useEventIAPPurchase';
 
 const CreateEventScreen = ({ navigation }) => {
   const { login } = useApp();
+  const { purchaseEventPackage, purchaseLoading, restoreEventPurchases } = useEventIAPPurchase();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     event_name: '',
@@ -181,8 +182,7 @@ const CreateEventScreen = ({ navigation }) => {
       });
       const event = response.data;
 
-      // Save session
-      await login({
+      const sessionData = {
         event_id: event.id,
         event_name: event.event_name,
         event_type: event.event_type,
@@ -195,31 +195,27 @@ const CreateEventScreen = ({ navigation }) => {
         event_tier: event.event_tier,
         event_tier_price: event.event_tier_price,
         payment_status: event.payment_status,
-      });
+      };
 
-      let checkoutStarted = false;
+      await login(sessionData);
+
+      let paymentComplete = false;
+      let paymentMessage = '';
       try {
-        const checkoutResponse = await paymentsApi.createEventCheckout({
-          event_id: event.id,
-          owner_pin: event.owner_pin,
+        await purchaseEventPackage({
+          eventId: event.id,
+          ownerPin: event.owner_pin,
+          tier: event.event_tier,
         });
-        const checkoutUrl = checkoutResponse.data?.checkout_url;
-        if (checkoutUrl) {
-          checkoutStarted = true;
-          await Linking.openURL(checkoutUrl);
-        }
-      } catch (checkoutError) {
-        Alert.alert(
-          'Event Created',
-          checkoutError.response?.data?.detail
-            ? `Your event was created, but Stripe Checkout could not start yet.\n\n${checkoutError.response.data.detail}\n\nYou can retry from the Home screen.`
-            : 'Your event was created, but Stripe Checkout could not start yet. You can retry from the Home screen.'
-        );
+        paymentComplete = true;
+        await login({ ...sessionData, payment_status: 'paid' });
+      } catch (purchaseError) {
+        paymentMessage = purchaseError.response?.data?.detail || purchaseError.message || '';
       }
 
       Alert.alert(
-        checkoutStarted ? 'Event Created - Payment Started' : 'Event Created',
-        `Your ${form.event_type === 'stag' ? 'Stag Do' : 'Hen Party'} has been created${checkoutStarted ? ' and Stripe Checkout has opened' : ''}.\n\nPackage: £${event.event_tier_price?.toFixed?.(2) || form.event_tier_price.toFixed(2)}\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nKeep these safe!`,
+        paymentComplete ? 'Event Created - Payment Complete' : 'Event Created - Payment Needed',
+        `Your ${form.event_type === 'stag' ? 'Stag Do' : 'Hen Party'} has been created${paymentComplete ? ' and the event package is active' : ', but Apple in-app purchase could not finish yet. You can retry from the Home screen'}.\n\n${paymentMessage ? `${paymentMessage}\n\n` : ''}Package: £${event.event_tier_price?.toFixed?.(2) || form.event_tier_price.toFixed(2)}\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nKeep these safe!`,
         [
           {
             text: 'Show QR Code',
@@ -233,9 +229,21 @@ const CreateEventScreen = ({ navigation }) => {
         ]
       );
     } catch (error) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to create event or start payment');
+      Alert.alert('Error', error.response?.data?.detail || 'Failed to create event or start Apple purchase');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRestorePurchases = async () => {
+    try {
+      await restoreEventPurchases();
+      Alert.alert(
+        'Restore Complete',
+        'Event packages are one-time purchases. If a pending purchase exists, it will be processed when you retry from this screen or the Home screen.'
+      );
+    } catch (error) {
+      Alert.alert('Restore Error', error?.message || 'Unable to restore purchases right now.');
     }
   };
 
@@ -360,15 +368,18 @@ const CreateEventScreen = ({ navigation }) => {
           })}
         </View>
 
-       <Button
+        <Button
           title="Create Event & Pay"
           variant="primary"
           color={form.event_type === 'stag' ? STAG_BLUE : HEN_PINK}
           size="large"
-          loading={loading}
+          loading={loading || purchaseLoading}
           onPress={handleCreate}
           style={styles.createButton}
         />
+        <TouchableOpacity style={styles.restoreButton} onPress={handleRestorePurchases}>
+          <Text style={styles.restoreButtonText}>Restore Purchases</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -518,6 +529,20 @@ const styles = StyleSheet.create({
   },
   createButton: {
     marginTop: spacing.md,
+  },
+  restoreButton: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginTop: spacing.md,
+    marginBottom: spacing.xl,
+    paddingVertical: spacing.sm,
+  },
+  restoreButtonText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontWeight: '600',
   },
 });
 

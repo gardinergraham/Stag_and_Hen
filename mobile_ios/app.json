@@ -12,17 +12,15 @@
       "resizeMode": "contain",
       "backgroundColor": "#0A0A0A"
     },
-
-
     "ios": {
       "supportsTablet": true,
+      "icon": "./assets/logo.png",
       "bundleIdentifier": "com.stagandhen.app",
       "infoPlist": {
         "NSCameraUsageDescription": "We need camera access to scan QR codes and take photos for the party gallery.",
         "NSPhotoLibraryUsageDescription": "We need photo library access to upload and save party photos.",
-        "NSPhotoLibraryAddUsageDescription":
-        "Stag and Hen may save photos or memorial images to your device when you download media from the gallery page."
-
+        "NSPhotoLibraryAddUsageDescription": "Stag and Hen may save photos or memorial images to your device when you download media from the gallery page.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -34,7 +32,12 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO"
       ]
     },
     "web": {
@@ -44,11 +47,15 @@
       "expo-camera",
       "expo-image-picker",
       "expo-media-library",
-      "expo-barcode-scanner",
+      "expo-iap",
       "expo-asset"
     ],
     "extra": {
-      "backendUrl": "https://stagandhen-production.up.railway.app"
-    }
+      "backendUrl": "https://stagandhen-production.up.railway.app",
+      "eas": {
+        "projectId": "9150a97d-b211-4473-b9b8-2e11fb0cb5b3"
+      }
+    },
+    "owner": "slayer2saint"
   }
 }

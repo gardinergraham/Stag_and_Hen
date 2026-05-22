@@ -167,6 +167,7 @@ export const pointsApi = {
 // Payments API
 export const paymentsApi = {
   createEventCheckout: (data) => api.post('/payments/event-checkout', data),
+  completeIOSIAP: (data) => api.post('/payments/ios-iap/complete', data),
   getEventStatus: (eventId, ownerPin) =>
     api.get(`/payments/event-status/${eventId}`, {
       params: {

@@ -1,12 +1,30 @@
 from fastapi import APIRouter, HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import base64
+import json
 from datetime import datetime, timezone
+import requests
 import stripe
 
-from models.payment import EventCheckoutCreate, EventCheckoutResponse, EventPaymentStatusResponse
+from models.payment import (
+    EventCheckoutCreate,
+    EventCheckoutResponse,
+    EventPaymentStatusResponse,
+    IOSIAPComplete,
+)
+from core.plans import (
+    APPLE_PRODUCT_PRICES,
+    EVENT_PLANS,
+    STRIPE_PRICE_ENV,
+    TIER_TO_APPLE_PRODUCT,
+    get_public_plan_config,
+)
 
 router = APIRouter(prefix="/payments", tags=["payments"])
+
+APPLE_PRODUCTION_VERIFY_URL = "https://buy.itunes.apple.com/verifyReceipt"
+APPLE_SANDBOX_VERIFY_URL = "https://sandbox.itunes.apple.com/verifyReceipt"
 
 mongo_url = os.environ["MONGO_URL"]
 client = AsyncIOMotorClient(mongo_url)
@@ -14,19 +32,12 @@ db = client[os.environ["DB_NAME"]]
 
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
 
-TIER_PRICE_ENV = {
-    "one_day": "STRIPE_PRICE_ONE_DAY",
-    "extended": "STRIPE_PRICE_EXTENDED",
-    "prime": "STRIPE_PRICE_PRIME",
-}
-
-
 def get_app_public_url() -> str:
     return os.environ.get("APP_PUBLIC_URL", "https://stag-and-hen.com").rstrip("/")
 
 
 def get_tier_price_id(tier: str) -> str:
-    price_id = os.environ.get(TIER_PRICE_ENV.get(tier, ""))
+    price_id = os.environ.get(STRIPE_PRICE_ENV.get(tier, ""))
     if not price_id:
         raise HTTPException(status_code=500, detail=f"Stripe price ID is missing for {tier}.")
     return price_id
@@ -54,6 +65,92 @@ def stripe_list_data(obj):
     if isinstance(obj, dict):
         return obj.get("data", [])
     return getattr(obj, "data", [])
+
+
+def is_storekit2_jws(receipt_data: str) -> bool:
+    return receipt_data.startswith("eyJ") and receipt_data.count(".") == 2
+
+
+def decode_storekit2_jws(jws_token: str) -> dict:
+    try:
+        payload_b64 = jws_token.split(".")[1]
+        payload_b64 += "=" * (-len(payload_b64) % 4)
+        payload_json = base64.urlsafe_b64decode(payload_b64.encode("utf-8"))
+        return json.loads(payload_json)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid Apple StoreKit receipt.")
+
+
+def verify_apple_receipt(receipt_data: str) -> dict:
+    payload = {
+        "receipt-data": receipt_data,
+        "exclude-old-transactions": True,
+    }
+    shared_secret = os.environ.get("APPLE_IAP_SHARED_SECRET")
+    if shared_secret:
+        payload["password"] = shared_secret
+
+    try:
+        prod_response = requests.post(APPLE_PRODUCTION_VERIFY_URL, json=payload, timeout=5)
+        prod_json = prod_response.json()
+    except Exception:
+        prod_json = {}
+
+    if prod_json.get("status") == 0:
+        return prod_json
+
+    if prod_json.get("status") != 21007 and prod_json:
+        raise HTTPException(status_code=400, detail="Invalid Apple receipt.")
+
+    try:
+        sandbox_response = requests.post(APPLE_SANDBOX_VERIFY_URL, json=payload, timeout=5)
+        sandbox_json = sandbox_response.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Apple receipt validation failed.")
+
+    if sandbox_json.get("status") != 0:
+        raise HTTPException(status_code=400, detail="Invalid Apple receipt.")
+
+    return sandbox_json
+
+
+def get_apple_purchase_from_receipt(receipt_data: str, expected_product_id: str) -> dict:
+    if is_storekit2_jws(receipt_data):
+        payload = decode_storekit2_jws(receipt_data)
+        product_id = payload.get("productId")
+        transaction_id = payload.get("transactionId")
+        if product_id != expected_product_id or not transaction_id:
+            raise HTTPException(status_code=400, detail="Apple receipt does not match this event package.")
+        return {
+            "product_id": product_id,
+            "transaction_id": str(transaction_id),
+            "environment": payload.get("environment", "Production"),
+            "is_storekit2": True,
+        }
+
+    receipt_info = verify_apple_receipt(receipt_data)
+    purchases = (
+        receipt_info.get("latest_receipt_info")
+        or receipt_info.get("receipt", {}).get("in_app")
+        or []
+    )
+    matching_purchase = next(
+        (purchase for purchase in reversed(purchases) if purchase.get("product_id") == expected_product_id),
+        None,
+    )
+    if not matching_purchase:
+        raise HTTPException(status_code=400, detail="Apple receipt does not include this event package.")
+
+    transaction_id = matching_purchase.get("transaction_id")
+    if not transaction_id:
+        raise HTTPException(status_code=400, detail="Apple receipt is missing a transaction ID.")
+
+    return {
+        "product_id": matching_purchase.get("product_id"),
+        "transaction_id": str(transaction_id),
+        "environment": receipt_info.get("environment", "Production"),
+        "is_storekit2": False,
+    }
 
 
 async def mark_event_paid(event_id: str, session) -> None:
@@ -128,6 +225,15 @@ async def sync_event_payment_status(event: dict, allow_recent_lookup: bool = Tru
     return event.get("payment_status", "pending")
 
 
+@router.get("/config")
+async def get_payment_config():
+    return {
+        "plans": get_public_plan_config(),
+        "apple_products": TIER_TO_APPLE_PRODUCT,
+        "apple_prices": APPLE_PRODUCT_PRICES,
+    }
+
+
 @router.get("/event-status/{event_id}", response_model=EventPaymentStatusResponse)
 async def get_event_payment_status(event_id: str, owner_pin: str):
     event = await db.events.find_one({"id": event_id, "owner_pin": owner_pin, "is_active": True})
@@ -189,7 +295,11 @@ async def create_event_checkout(checkout_input: EventCheckoutCreate):
         except Exception:
             pass
 
-    price_id = get_tier_price_id(event.get("event_tier", "prime"))
+    tier = event.get("event_tier", "prime")
+    if tier not in EVENT_PLANS:
+        raise HTTPException(status_code=400, detail="Unsupported event package.")
+
+    price_id = get_tier_price_id(tier)
     public_url = get_app_public_url()
 
     try:
@@ -200,7 +310,7 @@ async def create_event_checkout(checkout_input: EventCheckoutCreate):
             client_reference_id=event["id"],
             metadata={
                 "event_id": event["id"],
-                "event_tier": event.get("event_tier", "prime"),
+                "event_tier": tier,
                 "owner_name": event.get("owner_name", ""),
             },
             success_url=f"{public_url}/payment-success?event_id={event['id']}&session_id={{CHECKOUT_SESSION_ID}}",
@@ -224,6 +334,66 @@ async def create_event_checkout(checkout_input: EventCheckoutCreate):
         checkout_url=session.url,
         checkout_session_id=session.id,
         payment_status="pending",
+    )
+
+
+@router.post("/ios-iap/complete", response_model=EventPaymentStatusResponse)
+async def complete_ios_iap_purchase(purchase_input: IOSIAPComplete):
+    event = await db.events.find_one({
+        "id": purchase_input.event_id,
+        "owner_pin": purchase_input.owner_pin,
+        "is_active": True,
+    })
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found or owner PIN is invalid.")
+
+    expected_product_id = TIER_TO_APPLE_PRODUCT.get(event.get("event_tier", "prime"))
+    if purchase_input.product_id != expected_product_id:
+        raise HTTPException(status_code=400, detail="Apple product does not match this event package.")
+
+    if not purchase_input.purchase_token:
+        raise HTTPException(status_code=400, detail="Apple receipt is missing.")
+
+    apple_purchase = get_apple_purchase_from_receipt(
+        purchase_input.purchase_token,
+        expected_product_id,
+    )
+    apple_transaction_id = apple_purchase["transaction_id"]
+
+    existing_purchase = await db.events.find_one({
+        "ios_iap_transaction_id": apple_transaction_id,
+    })
+    if existing_purchase and existing_purchase["id"] != event["id"]:
+        raise HTTPException(status_code=409, detail="This Apple purchase has already been used.")
+    if existing_purchase and existing_purchase["id"] == event["id"]:
+        return EventPaymentStatusResponse(
+            event_id=event["id"],
+            payment_status=existing_purchase.get("payment_status", "paid"),
+            checkout_session_id=existing_purchase.get("stripe_checkout_session_id"),
+        )
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.events.update_one(
+        {"id": event["id"]},
+        {
+            "$set": {
+                "payment_status": "paid",
+                "payment_provider": "apple_iap",
+                "ios_iap_product_id": apple_purchase["product_id"],
+                "ios_iap_transaction_id": apple_transaction_id,
+                "ios_iap_environment": apple_purchase["environment"],
+                "ios_iap_is_storekit2": apple_purchase["is_storekit2"],
+                "ios_iap_purchase_token": purchase_input.purchase_token,
+                "paid_at": now,
+                "updated_at": now,
+            }
+        },
+    )
+
+    return EventPaymentStatusResponse(
+        event_id=event["id"],
+        payment_status="paid",
+        checkout_session_id=event.get("stripe_checkout_session_id"),
     )
 
 

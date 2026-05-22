@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from models.event import Event, EventCreate, EventUpdate
 from models.member import Member
+from core.plans import EVENT_PLANS
 from services.qr_code import generate_qr_code_data
 from services.s3 import delete_s3_file_by_url
 
@@ -47,6 +48,7 @@ async def delete_event_data(event_ids: List[str]):
 @router.post("/", response_model=Event)
 async def create_event(event_input: EventCreate):
     """Create a new stag or hen event"""
+    plan = EVENT_PLANS.get(event_input.event_tier, EVENT_PLANS["prime"])
     event = Event(
         event_name=event_input.event_name,
         event_type=event_input.event_type,
@@ -55,9 +57,9 @@ async def create_event(event_input: EventCreate):
         event_end_date=event_input.event_end_date,
         description=event_input.description,
         owner_name=event_input.owner_name,
-        media_delete_policy=event_input.media_delete_policy,
+        media_delete_policy=plan["media_delete_policy"],
         event_tier=event_input.event_tier,
-        event_tier_price=event_input.event_tier_price,
+        event_tier_price=plan["price"],
     )
     
     # Create owner as first member

@@ -41,6 +41,14 @@ class AccessResponse(BaseModel):
     payment_status: Optional[str] = None
 
 
+def require_paid_event(event: dict):
+    if event.get("payment_status") != "paid":
+        raise HTTPException(
+            status_code=402,
+            detail="This event is not active yet. The organiser needs to complete payment first.",
+        )
+
+
 @router.post("/access-qr", response_model=AccessResponse)
 async def access_via_qr(request: QRAccessRequest):
     """Join an event via QR code scan"""
@@ -52,6 +60,7 @@ async def access_via_qr(request: QRAccessRequest):
     
     if not event:
         raise HTTPException(status_code=401, detail="Invalid QR code or PIN")
+    require_paid_event(event)
     
     # Check if member already exists
     existing_member = await db.members.find_one({
@@ -99,6 +108,7 @@ async def access_via_manual(request: MemberAccess):
     
     if not event:
         raise HTTPException(status_code=401, detail="Invalid event name or PIN")
+    require_paid_event(event)
     
     # Check if member already exists
     existing_member = await db.members.find_one({
@@ -146,6 +156,7 @@ async def owner_login(request: OwnerLoginRequest):
     
     if not event:
         raise HTTPException(status_code=401, detail="Invalid event name or owner PIN")
+    require_paid_event(event)
     
     return AccessResponse(
         success=True,

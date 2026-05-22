@@ -197,25 +197,25 @@ const CreateEventScreen = ({ navigation }) => {
         payment_status: event.payment_status,
       };
 
-      await login(sessionData);
-
-      let paymentComplete = false;
-      let paymentMessage = '';
       try {
         await purchaseEventPackage({
           eventId: event.id,
           ownerPin: event.owner_pin,
           tier: event.event_tier,
         });
-        paymentComplete = true;
         await login({ ...sessionData, payment_status: 'paid' });
       } catch (purchaseError) {
-        paymentMessage = purchaseError.response?.data?.detail || purchaseError.message || '';
+        const paymentMessage = purchaseError.response?.data?.detail || purchaseError.message || '';
+        Alert.alert(
+          'Payment Not Complete',
+          `Your event has been reserved, but it will not open until Apple confirms payment.\n\n${paymentMessage ? `${paymentMessage}\n\n` : ''}Please try creating the event again or contact support if Apple charged you.`
+        );
+        return;
       }
 
       Alert.alert(
-        paymentComplete ? 'Event Created - Payment Complete' : 'Event Created - Payment Needed',
-        `Your ${form.event_type === 'stag' ? 'Stag Do' : 'Hen Party'} has been created${paymentComplete ? ' and the event package is active' : ', but Apple in-app purchase could not finish yet. You can retry from the Home screen'}.\n\n${paymentMessage ? `${paymentMessage}\n\n` : ''}Package: £${event.event_tier_price?.toFixed?.(2) || form.event_tier_price.toFixed(2)}\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nKeep these safe!`,
+        'Event Created - Payment Complete',
+        `Your ${form.event_type === 'stag' ? 'Stag Do' : 'Hen Party'} is active.\n\nPackage: £${event.event_tier_price?.toFixed?.(2) || form.event_tier_price.toFixed(2)}\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nKeep these safe!`,
         [
           {
             text: 'Show QR Code',

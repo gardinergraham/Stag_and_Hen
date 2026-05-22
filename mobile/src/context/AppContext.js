@@ -15,7 +15,16 @@ export const AppProvider = ({ children }) => {
     try {
       const savedSession = await sessionStorage.getSession();
       if (savedSession) {
-        setSession(savedSession);
+        const isUnpaidOwnerSession =
+          savedSession.role === 'owner' &&
+          !savedSession.is_preview &&
+          savedSession.payment_status &&
+          savedSession.payment_status !== 'paid';
+        if (isUnpaidOwnerSession) {
+          await sessionStorage.clearSession();
+        } else {
+          setSession(savedSession);
+        }
       }
     } catch (error) {
       console.error('Failed to load session:', error);

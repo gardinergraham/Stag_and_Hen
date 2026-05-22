@@ -14,10 +14,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, typography, spacing } from '../theme';
 import { Button, TextInput, Card } from '../components';
 import { eventsApi, paymentsApi } from '../services/api';
-import { useApp } from '../context/AppContext';
 
 const CreateEventScreen = ({ navigation }) => {
-  const { login } = useApp();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     event_name: '',
@@ -181,22 +179,6 @@ const CreateEventScreen = ({ navigation }) => {
       });
       const event = response.data;
 
-      // Save session
-      await login({
-        event_id: event.id,
-        event_name: event.event_name,
-        event_type: event.event_type,
-        member_name: event.owner_name,
-        role: 'owner',
-        owner_pin: event.owner_pin,
-        access_pin: event.access_pin,
-        event_date: event.event_date,
-        event_end_date: event.event_end_date,
-        event_tier: event.event_tier,
-        event_tier_price: event.event_tier_price,
-        payment_status: event.payment_status,
-      });
-
       let checkoutStarted = false;
       try {
         const checkoutResponse = await paymentsApi.createEventCheckout({
@@ -218,18 +200,10 @@ const CreateEventScreen = ({ navigation }) => {
       }
 
       Alert.alert(
-        checkoutStarted ? 'Event Created - Payment Started' : 'Event Created',
-        `Your ${form.event_type === 'stag' ? 'Stag Do' : 'Hen Party'} has been created${checkoutStarted ? ' and Stripe Checkout has opened' : ''}.\n\nPackage: £${event.event_tier_price?.toFixed?.(2) || form.event_tier_price.toFixed(2)}\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nKeep these safe!`,
+        checkoutStarted ? 'Payment Started' : 'Payment Needed',
+        `Your event will not open until Stripe confirms payment.\n\nPackage: £${event.event_tier_price?.toFixed?.(2) || form.event_tier_price.toFixed(2)}\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nAfter payment completes, return to the app and sign in as owner using the event name and owner PIN.`,
         [
-          {
-            text: 'Show QR Code',
-            onPress: () =>
-              navigation.reset({
-                index: 1,
-                routes: [{ name: 'Main' }, { name: 'ShareQR' }],
-              }),
-          },
-          { text: 'Go Home', onPress: () => navigation.replace('Main') },
+          { text: 'OK', onPress: () => navigation.replace('Welcome') },
         ]
       );
     } catch (error) {

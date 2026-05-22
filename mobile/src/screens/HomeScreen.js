@@ -145,6 +145,24 @@ const HomeScreen = ({ navigation }) => {
   const countdown = getCountdownParts(eventDate);
   const paymentStatus = event?.payment_status || session?.payment_status || 'pending';
   const paymentRequired = isOwner && !isPreview && paymentStatus !== 'paid';
+
+  useEffect(() => {
+    if (!paymentRequired) return;
+    Alert.alert(
+      'Payment Required',
+      'This event is not active yet. Complete payment first, then sign in again with the owner PIN.',
+      [
+        {
+          text: 'OK',
+          onPress: async () => {
+            await logout();
+            navigation.replace('Welcome');
+          },
+        },
+      ]
+    );
+  }, [paymentRequired, logout, navigation]);
+
   const pointsByName = leaderboard.reduce((acc, entry) => {
     acc[entry.member_name] = entry.points;
     return acc;

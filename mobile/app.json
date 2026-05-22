@@ -39,13 +39,12 @@
       ]
     },
     "web": {
-      "favicon": "./assets/logo.jpg"
+      "favicon": "./assets/app-logo.jpg"
     },
     "plugins": [
       "expo-camera",
       "expo-image-picker",
       "expo-media-library",
-      "expo-barcode-scanner",
       "expo-asset"
     ],
     "extra": {

@@ -328,7 +328,7 @@ const HomeScreen = ({ navigation }) => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <Image source={require('../../assets/logo.jpg')} style={styles.logo} />
+          <Image source={require('../../assets/app-logo.jpg')} style={styles.logo} />
           <View style={styles.headerText}>
             <Text style={styles.eventName}>{session.event_name}</Text>
             <Text style={[styles.eventType, { color: theme.accent }]}>

@@ -308,7 +308,7 @@ const Footer = () => (
           <ul>
             <li><a href="/support" data-testid="footer-faq">FAQs</a></li>
             <li><a href="/support" data-testid="footer-contact">Contact Us</a></li>
-            <li><a href="#" data-testid="footer-privacy">Privacy Policy</a></li>
+            <li><a href="/privacy" data-testid="footer-privacy">Privacy Policy</a></li>
             <li><a href="/terms" data-testid="footer-terms">Terms of Service</a></li>
           </ul>
         </div>
@@ -404,6 +404,71 @@ const TermsPage = () => (
   </div>
 );
 
+const PrivacyPage = () => (
+  <div className="App">
+    <Header />
+    <main className="legal-page">
+      <section className="legal-hero">
+        <div className="container">
+          <p className="legal-eyebrow">Privacy</p>
+          <h1>Stag & Hen Privacy Policy</h1>
+          <p>
+            This policy explains what information Stag & Hen collects, how it is used,
+            and the choices available to event owners and guests.
+          </p>
+        </div>
+      </section>
+
+      <section className="legal-content-section">
+        <div className="container legal-content">
+          <article>
+            <h2>1. Information We Collect</h2>
+            <p>We collect information needed to create and run events, including event names, organiser names, guest names, PIN access details, photos, videos, messages, game activity, points, kitty activity, wishlist requests, and basic technical information such as device and app usage data.</p>
+          </article>
+          <article>
+            <h2>2. Photos, Videos, and User Content</h2>
+            <p>Photos, videos, messages, and other uploads are shared inside the event for the organiser and invited participants. Users are responsible for the content they upload and must only upload content they have permission to share.</p>
+          </article>
+          <article>
+            <h2>3. Camera and Photo Permissions</h2>
+            <p>The app asks for camera and photo library permissions so users can scan QR codes, take photos or videos, upload media, and save selected media where supported. These permissions are used only for app features requested by the user.</p>
+          </article>
+          <article>
+            <h2>4. Payments</h2>
+            <p>Event purchases may be handled by Stripe, Apple, or Google depending on the platform. Stag & Hen does not store full card details. Payment providers process payment information under their own security and privacy policies.</p>
+          </article>
+          <article>
+            <h2>5. How We Use Information</h2>
+            <p>We use information to create events, let guests join, manage media galleries, operate games and party features, support purchases, provide customer support, prevent abuse, improve the service, and comply with legal or platform requirements.</p>
+          </article>
+          <article>
+            <h2>6. Sharing of Information</h2>
+            <p>We do not sell personal information. Event content is intended for the organiser and invited event participants. We may share limited information with trusted service providers who help operate hosting, storage, payments, analytics, or support.</p>
+          </article>
+          <article>
+            <h2>7. Data Deletion</h2>
+            <p>Event owners can delete event data from within the app. Deletion may remove event details, crew records, media records, games, points, kitty history, and related content. Users can also contact support for help with data deletion requests.</p>
+          </article>
+          <article>
+            <h2>8. Data Security and Retention</h2>
+            <p>We use reasonable technical measures to protect event data. Some event packages may include automatic media deletion rules. Where no deletion rule applies, data may be kept while the event remains active or until deletion is requested.</p>
+          </article>
+          <article>
+            <h2>9. Children</h2>
+            <p>Stag & Hen is intended for adult event organisers and guests. The app is not directed at children.</p>
+          </article>
+          <article>
+            <h2>10. Contact</h2>
+            <p>For privacy questions or deletion requests, contact us at <strong>support@stag-and-hen.com</strong>.</p>
+          </article>
+          <p className="legal-updated">Last updated: May 2026</p>
+        </div>
+      </section>
+    </main>
+    <Footer />
+  </div>
+);
+
 const PaymentStatusPage = ({ status }) => {
   const success = status === "success";
   return (
@@ -487,6 +552,7 @@ const SupportPage = () => (
           <div className="support-links">
             <a href="/" className="btn btn-secondary">About Stag & Hen</a>
             <a href="/terms" className="btn btn-primary">Terms & Conditions</a>
+            <a href="/privacy" className="btn btn-secondary">Privacy Policy</a>
           </div>
         </div>
       </section>
@@ -1537,6 +1603,9 @@ function App() {
   }
   if (window.location.pathname === "/support") {
     return <SupportPage />;
+  }
+  if (window.location.pathname === "/privacy") {
+    return <PrivacyPage />;
   }
   if (window.location.pathname === "/payment-success") {
     return <PaymentStatusPage status="success" />;

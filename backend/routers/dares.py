@@ -74,16 +74,31 @@ def normalize_spin_result(result):
 
 
 def normalize_secret_mission(mission):
+    if not mission:
+        return mission
+    mission.pop("_id", None)
     if isinstance(mission.get("created_at"), str):
-        mission["created_at"] = datetime.fromisoformat(mission["created_at"].replace("Z", "+00:00"))
+        try:
+            mission["created_at"] = datetime.fromisoformat(mission["created_at"].replace("Z", "+00:00"))
+        except ValueError:
+            mission["created_at"] = datetime.utcnow()
     if mission.get("completed_at") and isinstance(mission["completed_at"], str):
-        mission["completed_at"] = datetime.fromisoformat(mission["completed_at"].replace("Z", "+00:00"))
+        try:
+            mission["completed_at"] = datetime.fromisoformat(mission["completed_at"].replace("Z", "+00:00"))
+        except ValueError:
+            mission["completed_at"] = None
     return mission
 
 
 def normalize_secret_mission_template(template):
+    if not template:
+        return template
+    template.pop("_id", None)
     if isinstance(template.get("created_at"), str):
-        template["created_at"] = datetime.fromisoformat(template["created_at"].replace("Z", "+00:00"))
+        try:
+            template["created_at"] = datetime.fromisoformat(template["created_at"].replace("Z", "+00:00"))
+        except ValueError:
+            template["created_at"] = datetime.utcnow()
     return template
 
 
@@ -396,7 +411,7 @@ async def assign_secret_mission(mission_input: SecretMissionAssign):
     mission_doc = mission.model_dump()
     mission_doc["created_at"] = mission_doc["created_at"].isoformat()
     await db.secret_missions.insert_one(mission_doc)
-    return mission
+    return normalize_secret_mission(mission_doc)
 
 
 @router.put("/secret-mission/{mission_id}/complete", response_model=SecretMission)

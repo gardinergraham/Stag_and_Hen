@@ -13,7 +13,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, typography, spacing } from '../theme';
 import { Button, TextInput, Card } from '../components';
-import { eventsApi, paymentsApi } from '../services/api';
+import { eventsApi, paymentsApi, sessionStorage } from '../services/api';
 
 const CreateEventScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(false);
@@ -178,6 +178,21 @@ const CreateEventScreen = ({ navigation }) => {
         event_end_date: eventEndDate,
       });
       const event = response.data;
+      const pendingEventPayment = {
+        event_id: event.id,
+        event_name: event.event_name,
+        event_type: event.event_type,
+        member_name: event.owner_name,
+        role: 'owner',
+        owner_pin: event.owner_pin,
+        access_pin: event.access_pin,
+        event_date: event.event_date,
+        event_end_date: event.event_end_date,
+        event_tier: event.event_tier,
+        event_tier_price: event.event_tier_price,
+        payment_status: event.payment_status,
+      };
+      await sessionStorage.savePendingEventPayment(pendingEventPayment);
 
       let checkoutStarted = false;
       try {
@@ -201,7 +216,7 @@ const CreateEventScreen = ({ navigation }) => {
 
       Alert.alert(
         checkoutStarted ? 'Payment Started' : 'Payment Needed',
-        `Your event will not open until Stripe confirms payment.\n\nPackage: £${event.event_tier_price?.toFixed?.(2) || form.event_tier_price.toFixed(2)}\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nAfter payment completes, return to the app and sign in as owner using the event name and owner PIN.`,
+        `Your event will not open until Stripe confirms payment.\n\nPackage: £${event.event_tier_price?.toFixed?.(2) || form.event_tier_price.toFixed(2)}\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nAfter payment completes, return to the app. We will check the payment and open your event automatically.`,
         [
           { text: 'OK', onPress: () => navigation.replace('Welcome') },
         ]

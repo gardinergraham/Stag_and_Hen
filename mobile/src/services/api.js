@@ -189,6 +189,19 @@ export const sessionStorage = {
   async clearSession() {
     await AsyncStorage.removeItem('session');
   },
+
+  async savePendingEventPayment(data) {
+    await AsyncStorage.setItem('pending_event_payment', JSON.stringify(data));
+  },
+
+  async getPendingEventPayment() {
+    const data = await AsyncStorage.getItem('pending_event_payment');
+    return data ? JSON.parse(data) : null;
+  },
+
+  async clearPendingEventPayment() {
+    await AsyncStorage.removeItem('pending_event_payment');
+  },
   
   async saveEventDetails(eventId, data) {
     await AsyncStorage.setItem(`event_${eventId}`, JSON.stringify(data));

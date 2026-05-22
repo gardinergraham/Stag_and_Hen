@@ -194,7 +194,6 @@ const CreateEventScreen = ({ navigation }) => {
       };
       await sessionStorage.savePendingEventPayment(pendingEventPayment);
 
-      let checkoutStarted = false;
       try {
         const checkoutResponse = await paymentsApi.createEventCheckout({
           event_id: event.id,
@@ -202,21 +201,26 @@ const CreateEventScreen = ({ navigation }) => {
         });
         const checkoutUrl = checkoutResponse.data?.checkout_url;
         if (checkoutUrl) {
-          checkoutStarted = true;
           await Linking.openURL(checkoutUrl);
+          navigation.replace('Welcome');
+          return;
         }
       } catch (checkoutError) {
         Alert.alert(
           'Event Created',
           checkoutError.response?.data?.detail
-            ? `Your event was created, but Stripe Checkout could not start yet.\n\n${checkoutError.response.data.detail}\n\nYou can retry from the Home screen.`
-            : 'Your event was created, but Stripe Checkout could not start yet. You can retry from the Home screen.'
+            ? `Your event was created, but Stripe Checkout could not start yet.\n\n${checkoutError.response.data.detail}\n\nPlease try again from the welcome screen.`
+            : 'Your event was created, but Stripe Checkout could not start yet. Please try again from the welcome screen.',
+          [
+            { text: 'OK', onPress: () => navigation.replace('Welcome') },
+          ]
         );
+        return;
       }
 
       Alert.alert(
-        checkoutStarted ? 'Payment Started' : 'Payment Needed',
-        `Your event will not open until Stripe confirms payment.\n\nPackage: £${event.event_tier_price?.toFixed?.(2) || form.event_tier_price.toFixed(2)}\nOwner PIN: ${event.owner_pin}\nCrew Access PIN: ${event.access_pin}\n\nAfter payment completes, return to the app. We will check the payment and open your event automatically.`,
+        'Payment Needed',
+        'Stripe Checkout did not return a payment link. Please try again.',
         [
           { text: 'OK', onPress: () => navigation.replace('Welcome') },
         ]

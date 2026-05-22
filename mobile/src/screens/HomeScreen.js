@@ -15,6 +15,7 @@ import {
   AppState,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import * as Clipboard from 'expo-clipboard';
 import { colors, typography, spacing, getEventTheme } from '../theme';
 import { Card, Button } from '../components';
 import { eventsApi, kittyApi, pointsApi, paymentsApi } from '../services/api';
@@ -211,6 +212,17 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
+  const copyEventAccessDetails = async () => {
+    const details = [
+      `The Stag & Hen Event: ${session.event_name}`,
+      `Owner PIN: ${session.owner_pin || 'Not available'}`,
+      `Crew Access PIN: ${session.access_pin || 'Not available'}`,
+      `Event Type: ${theme.label}`,
+    ].join('\n');
+    await Clipboard.setStringAsync(details);
+    Alert.alert('Copied', 'Event access details copied to clipboard.');
+  };
+
   const startEventCheckout = async () => {
     if (!session?.event_id || !session?.owner_pin) return;
     setStartingCheckout(true);
@@ -405,6 +417,45 @@ const HomeScreen = ({ navigation }) => {
                 onPress={startEventCheckout}
                 style={styles.paymentButton}
               />
+            </Card.Content>
+          </Card>
+        )}
+
+        {isOwner && !isPreview && !paymentRequired && (
+          <Card style={[styles.accessCard, { borderColor: `${theme.accent}55` }]}>
+            <Card.Content>
+              <Text style={[styles.accessEyebrow, { color: theme.accent }]}>Owner Access</Text>
+              <Text style={styles.accessTitle}>Event details and PINs</Text>
+              <View style={styles.accessRows}>
+                <View style={styles.accessRow}>
+                  <Text style={styles.accessLabel}>Event name</Text>
+                  <Text style={styles.accessValue}>{session.event_name}</Text>
+                </View>
+                <View style={styles.accessRow}>
+                  <Text style={styles.accessLabel}>Owner PIN</Text>
+                  <Text style={styles.accessValue}>{session.owner_pin}</Text>
+                </View>
+                <View style={styles.accessRow}>
+                  <Text style={styles.accessLabel}>Crew PIN</Text>
+                  <Text style={styles.accessValue}>{session.access_pin}</Text>
+                </View>
+              </View>
+              <View style={styles.accessActions}>
+                <Button
+                  title="Copy Details"
+                  variant="primary"
+                  color={theme.accent}
+                  size="small"
+                  onPress={copyEventAccessDetails}
+                />
+                <Button
+                  title="Share QR"
+                  variant="outline"
+                  color={theme.accent}
+                  size="small"
+                  onPress={() => navigation.navigate('ShareQR')}
+                />
+              </View>
             </Card.Content>
           </Card>
         )}
@@ -689,6 +740,44 @@ const styles = StyleSheet.create({
   },
   paymentButton: {
     alignSelf: 'flex-start',
+  },
+  accessCard: {
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+  },
+  accessEyebrow: {
+    ...typography.caption,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
+  },
+  accessTitle: {
+    ...typography.h3,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  accessRows: {
+    gap: spacing.sm,
+  },
+  accessRow: {
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    padding: spacing.sm,
+  },
+  accessLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+  },
+  accessValue: {
+    ...typography.body,
+    color: colors.text,
+    marginTop: 2,
+  },
+  accessActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
   countdownHeader: {
     flexDirection: 'row',

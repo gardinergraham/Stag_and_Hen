@@ -373,7 +373,7 @@ async def get_secret_mission(event_id: str, member_name: str):
     return normalize_secret_mission(mission)
 
 
-@router.post("/secret-mission/assign", response_model=SecretMission)
+@router.post("/secret-mission/assign")
 async def assign_secret_mission(mission_input: SecretMissionAssign):
     event = await db.events.find_one({"id": mission_input.event_id, "is_active": True})
     if not event:
@@ -400,7 +400,11 @@ async def assign_secret_mission(mission_input: SecretMissionAssign):
         },
         {"_id": 0},
     ).to_list(500)
-    template_texts = [template.get("text") for template in templates if template.get("text")]
+    template_texts = [
+        template.get("text").strip()
+        for template in templates
+        if isinstance(template.get("text"), str) and template.get("text").strip()
+    ]
     mission_text = random.choice(template_texts or SECRET_MISSION_TEMPLATES)
 
     mission = SecretMission(
@@ -411,7 +415,17 @@ async def assign_secret_mission(mission_input: SecretMissionAssign):
     mission_doc = mission.model_dump()
     mission_doc["created_at"] = mission_doc["created_at"].isoformat()
     await db.secret_missions.insert_one(mission_doc)
-    return normalize_secret_mission(mission_doc)
+    return {
+        "id": mission_doc["id"],
+        "event_id": mission_doc["event_id"],
+        "member_name": mission_doc["member_name"],
+        "mission_text": mission_doc["mission_text"],
+        "evidence": mission_doc.get("evidence"),
+        "is_completed": mission_doc.get("is_completed", False),
+        "completed_at": mission_doc.get("completed_at"),
+        "is_active": mission_doc.get("is_active", True),
+        "created_at": mission_doc["created_at"],
+    }
 
 
 @router.put("/secret-mission/{mission_id}/complete", response_model=SecretMission)

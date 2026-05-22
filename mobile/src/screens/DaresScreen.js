@@ -941,7 +941,7 @@ const DaresScreen = ({ navigation }) => {
                         variant={secretMission ? 'outline' : 'primary'}
                         color={theme.accent}
                         loading={loadingMission}
-                        onPress={drawSecretMission}
+                        onPress={() => drawSecretMission(false)}
                         style={styles.dareButton}
                       />
                       {secretMission && (

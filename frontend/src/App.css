@@ -629,6 +629,13 @@
   margin-top: 2rem;
 }
 
+.payment-status-note {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  margin-top: 1rem;
+  max-width: 560px;
+}
+
 .support-hero {
   background: linear-gradient(135deg, rgba(0, 183, 255, 0.14), rgba(255, 20, 147, 0.14)), var(--bg-primary);
 }

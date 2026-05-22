@@ -471,6 +471,23 @@ const PrivacyPage = () => (
 
 const PaymentStatusPage = ({ status }) => {
   const success = status === "success";
+  const query = typeof window !== "undefined" ? window.location.search : "";
+  const appUrl = `stagandhen://payment-${status}${query}`;
+  const androidIntentUrl = `intent://payment-${status}${query}#Intent;scheme=stagandhen;package=com.stagandhen.app;end`;
+
+  useEffect(() => {
+    if (!success) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const isAndroid = /Android/i.test(window.navigator.userAgent);
+      window.location.href = isAndroid ? androidIntentUrl : appUrl;
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [androidIntentUrl, appUrl, success]);
+
   return (
     <div className="App">
       <Header />
@@ -481,13 +498,27 @@ const PaymentStatusPage = ({ status }) => {
             <h1>{success ? "Your Event Is Paid" : "Checkout Was Cancelled"}</h1>
             <p>
               {success
-                ? "Stripe has confirmed the payment. You can return to the Stag & Hen app and continue setting up your event."
+                ? "Stripe has confirmed the payment. If the app is installed, this page will try to take you back automatically."
                 : "No payment was taken. You can return to the Stag & Hen app and try again from the event owner screen."}
             </p>
             <div className="hero-buttons payment-status-actions">
-              <a href="/" className="btn btn-primary">Back to Home</a>
-              <a href="#download" className="btn btn-secondary">Get the App</a>
+              {success ? (
+                <>
+                  <a href={androidIntentUrl} className="btn btn-primary">Open Stag & Hen App</a>
+                  <a href={appUrl} className="btn btn-secondary">Try App Link</a>
+                </>
+              ) : (
+                <>
+                  <a href={appUrl} className="btn btn-primary">Return to App</a>
+                  <a href="/" className="btn btn-secondary">Back to Home</a>
+                </>
+              )}
             </div>
+            {success && (
+              <p className="payment-status-note">
+                If nothing happens, open The Stag & Hen app manually and tap Check Payment & Open Event.
+              </p>
+            )}
           </div>
         </section>
       </main>

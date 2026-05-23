@@ -13,9 +13,9 @@ import {
   TextInput as NativeTextInput,
   Linking,
   AppState,
+  Share,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import * as Clipboard from 'expo-clipboard';
 import { colors, typography, spacing, getEventTheme } from '../theme';
 import { Card, Button } from '../components';
 import { eventsApi, kittyApi, pointsApi, paymentsApi } from '../services/api';
@@ -212,15 +212,17 @@ const HomeScreen = ({ navigation }) => {
     }
   };
 
-  const copyEventAccessDetails = async () => {
+  const shareEventAccessDetails = async () => {
     const details = [
       `The Stag & Hen Event: ${session.event_name}`,
       `Owner PIN: ${session.owner_pin || 'Not available'}`,
       `Crew Access PIN: ${session.access_pin || 'Not available'}`,
       `Event Type: ${theme.label}`,
     ].join('\n');
-    await Clipboard.setStringAsync(details);
-    Alert.alert('Copied', 'Event access details copied to clipboard.');
+    await Share.share({
+      title: 'The Stag & Hen Event Access',
+      message: details,
+    });
   };
 
   const startEventCheckout = async () => {
@@ -446,7 +448,7 @@ const HomeScreen = ({ navigation }) => {
                   variant="primary"
                   color={theme.accent}
                   size="small"
-                  onPress={copyEventAccessDetails}
+                  onPress={shareEventAccessDetails}
                 />
                 <Button
                   title="Share QR"

@@ -2,7 +2,8 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, StyleSheet } from 'react-native';
+import { Platform, View, Text, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, getEventTheme } from '../theme';
 import { useApp } from '../context/AppContext';
 
@@ -36,12 +37,20 @@ const TabIcon = ({ icon, label, focused, activeColor = colors.primary }) => (
 const MainTabs = () => {
   const { session } = useApp();
   const theme = getEventTheme(session?.event_type);
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'android' ? 24 : 0);
 
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            height: 62 + bottomInset,
+            paddingBottom: bottomInset + 8,
+          },
+        ],
         tabBarShowLabel: false,
       }}
     >
@@ -170,8 +179,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopColor: colors.border,
     borderTopWidth: 1,
-    height: 80,
-    paddingBottom: 20,
     paddingTop: 10,
   },
   tabIcon: {

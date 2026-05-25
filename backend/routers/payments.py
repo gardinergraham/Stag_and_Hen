@@ -296,7 +296,7 @@ async def sync_saved_addon_session(event: dict, field_name: str) -> bool:
     return False
 
 
-async def find_recent_paid_session_for_event(event_id: str):
+async def find_recent_paid_session_for_event(event_id: str, purchase_types: set[str] | None = None):
     try:
         sessions = stripe.checkout.Session.list(limit=100)
     except Exception:
@@ -305,6 +305,8 @@ async def find_recent_paid_session_for_event(event_id: str):
     try:
         for session in stripe_list_data(sessions):
             metadata = stripe_metadata(session)
+            if purchase_types and metadata.get("purchase_type") not in purchase_types:
+                continue
             if (
                 metadata.get("event_id") == event_id
                 or stripe_value(session, "client_reference_id") == event_id
@@ -319,12 +321,11 @@ async def find_recent_paid_session_for_event(event_id: str):
 
 
 async def sync_recent_paid_addon_session(event: dict) -> bool:
-    session = await find_recent_paid_session_for_event(event["id"])
+    session = await find_recent_paid_session_for_event(
+        event["id"],
+        purchase_types={"upgrade"},
+    )
     if not session:
-        return False
-
-    metadata = stripe_metadata(session)
-    if metadata.get("purchase_type") not in {"upgrade", "upload_extension"}:
         return False
 
     await mark_event_paid(event["id"], session)

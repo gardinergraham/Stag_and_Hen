@@ -151,6 +151,7 @@ export default function GalleryScreen(props) {
     event_date: eventDetails?.event_date || session?.event_date,
     event_end_date: eventDetails?.event_end_date || session?.event_end_date,
     event_tier: eventDetails?.event_tier || session?.event_tier,
+    upload_extension_hours: eventDetails?.upload_extension_hours ?? session?.upload_extension_hours,
   });
 
   const ensureUploadsOpen = () => {

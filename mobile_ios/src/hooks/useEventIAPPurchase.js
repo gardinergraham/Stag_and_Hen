@@ -15,6 +15,8 @@ export const IOS_EVENT_UPGRADE_PRODUCTS = {
   extended_to_prime: 'com.stagandhen.upgrade.extendedtoprime',
 };
 
+export const IOS_UPLOAD_EXTENSION_PRODUCT_ID = 'com.stagandhen.extension.upload24';
+
 export const getEventIAPProductId = (tier = 'prime') =>
   IOS_EVENT_IAP_PRODUCTS[tier] || IOS_EVENT_IAP_PRODUCTS.prime;
 
@@ -24,12 +26,14 @@ export const getEventUpgradeProductId = (fromTier, toTier) =>
 export const useEventIAPPurchase = () => {
   const pendingPurchaseRef = useRef(null);
   const finishTransactionRef = useRef(null);
+  const productsRef = useRef([]);
   const [purchaseLoading, setPurchaseLoading] = useState(false);
 
   const {
     connected,
     fetchProducts,
     finishTransaction,
+    products,
     requestPurchase,
     restorePurchases,
   } = useIAP({
@@ -47,6 +51,7 @@ export const useEventIAPPurchase = () => {
           transaction_id: purchase.transactionId || purchase.id,
           purchase_token: purchase.purchaseToken || null,
           target_tier: pending.targetTier || null,
+          purchase_type: pending.purchaseType || null,
         });
 
         if (finishTransactionRef.current) {
@@ -79,8 +84,21 @@ export const useEventIAPPurchase = () => {
     finishTransactionRef.current = finishTransaction;
   }, [finishTransaction]);
 
+  useEffect(() => {
+    productsRef.current = products || [];
+  }, [products]);
+
+  const waitForProduct = useCallback(async (productId) => {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const found = productsRef.current.some((product) => product.id === productId);
+      if (found) return true;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return false;
+  }, []);
+
   const purchaseEventPackage = useCallback(
-    ({ eventId, ownerPin, tier, productId: productIdOverride, targetTier }) => {
+    ({ eventId, ownerPin, tier, productId: productIdOverride, targetTier, purchaseType }) => {
       if (Platform.OS !== 'ios') {
         return Promise.reject(new Error('Apple in-app purchases are only available on iOS.'));
       }
@@ -105,13 +123,14 @@ export const useEventIAPPurchase = () => {
             pendingPurchaseRef.current = null;
             setPurchaseLoading(false);
           }
-        }, 120000);
+        }, 45000);
 
         pendingPurchaseRef.current = {
           eventId,
           ownerPin,
           productId,
           targetTier,
+          purchaseType,
           resolve,
           reject,
           timeoutId,
@@ -119,6 +138,12 @@ export const useEventIAPPurchase = () => {
 
         try {
           await fetchProducts({ skus: [productId], type: 'in-app' });
+          const productAvailable = await waitForProduct(productId);
+          if (!productAvailable) {
+            throw new Error(
+              `Apple product is not available in StoreKit yet: ${productId}. Check it is added to the app version for TestFlight and ready for sandbox testing.`
+            );
+          }
           await requestPurchase({
             request: {
               apple: { sku: productId },
@@ -133,7 +158,7 @@ export const useEventIAPPurchase = () => {
         }
       });
     },
-    [connected, fetchProducts, requestPurchase]
+    [connected, fetchProducts, requestPurchase, waitForProduct]
   );
 
   const restoreEventPurchases = useCallback(async () => {

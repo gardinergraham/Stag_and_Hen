@@ -45,6 +45,7 @@ class Event(BaseModel):
     media_delete_policy: Literal["1_day", "1_week", "1_month", "never"] = "never"
     event_tier: Literal["one_day", "extended", "prime"] = "prime"
     event_tier_price: float = Field(default=95.0)
+    upload_extension_hours: int = Field(default=0)
     payment_status: Literal["pending", "paid", "failed"] = Field(default="pending")
     kitty_balance: float = Field(default=0.0)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

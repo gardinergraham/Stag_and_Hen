@@ -5,6 +5,7 @@ class EventCheckoutCreate(BaseModel):
     event_id: str = Field(..., min_length=1)
     owner_pin: str = Field(..., min_length=1)
     target_tier: str | None = None
+    purchase_type: str | None = None
 
 
 class EventCheckoutResponse(BaseModel):
@@ -26,3 +27,4 @@ class IOSIAPComplete(BaseModel):
     transaction_id: str | None = None
     purchase_token: str | None = None
     target_tier: str | None = None
+    purchase_type: str | None = None

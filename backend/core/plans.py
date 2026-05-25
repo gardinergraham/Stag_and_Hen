@@ -62,6 +62,14 @@ APPLE_UPGRADE_PRODUCTS = {
     ("extended", "prime"): "com.stagandhen.upgrade.extendedtoprime",
 }
 
+UPLOAD_EXTENSION = {
+    "hours": 24,
+    "amount_pence": 1299,
+    "price": 12.99,
+    "display_price_gbp": "£12.99",
+    "apple_product_id": "com.stagandhen.extension.upload24",
+}
+
 APPLE_UPGRADE_PRODUCT_TO_TIERS = {
     product_id: tiers for tiers, product_id in APPLE_UPGRADE_PRODUCTS.items()
 }
@@ -81,6 +89,11 @@ APPLE_PRODUCT_PRICES.update({
     }
     for (from_tier, to_tier), product_id in APPLE_UPGRADE_PRODUCTS.items()
 })
+
+APPLE_PRODUCT_PRICES[UPLOAD_EXTENSION["apple_product_id"]] = {
+    "amount_pence": UPLOAD_EXTENSION["amount_pence"],
+    "currency": "gbp",
+}
 
 
 def get_public_plan_config():

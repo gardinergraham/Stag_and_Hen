@@ -116,10 +116,13 @@ export const getEventMediaWindows = (event = {}) => {
   const startDate = event.event_date ? new Date(event.event_date) : null;
   const endDate = event.event_end_date ? new Date(event.event_end_date) : startDate;
   const tier = event.event_tier || 'prime';
+  const uploadExtensionHours = Number(event.upload_extension_hours || 0);
 
   const validStart = isValidEventDate(startDate) ? startDate : null;
   const validEnd = isValidEventDate(endDate) ? endDate : validStart;
-  const uploadGraceEnd = validEnd ? new Date(validEnd.getTime() + 24 * 60 * 60 * 1000) : null;
+  const uploadGraceEnd = validEnd
+    ? new Date(validEnd.getTime() + (24 + uploadExtensionHours) * 60 * 60 * 1000)
+    : null;
 
   const downloadUntil = (() => {
     if (!validEnd || tier === 'prime') return null;

@@ -20,6 +20,7 @@ from core.plans import (
     EVENT_PLANS,
     STRIPE_PRICE_ENV,
     TIER_TO_APPLE_PRODUCT,
+    UPLOAD_EXTENSION,
     get_public_plan_config,
 )
 
@@ -99,6 +100,20 @@ async def apply_event_plan(event_id: str, target_tier: str) -> None:
     await db.media.update_many(
         {"event_id": event_id, "is_deleted": False},
         {"$set": {"delete_at": delete_at.isoformat() if delete_at else None}},
+    )
+
+
+async def apply_upload_extension(event_id: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    await db.events.update_one(
+        {"id": event_id},
+        {
+            "$inc": {"upload_extension_hours": UPLOAD_EXTENSION["hours"]},
+            "$set": {
+                "last_upload_extension_at": now,
+                "updated_at": now,
+            },
+        },
     )
 
 
@@ -213,14 +228,39 @@ def get_apple_purchase_from_receipt(receipt_data: str, expected_product_id: str)
 
 
 async def mark_event_paid(event_id: str, session) -> None:
+    event = await db.events.find_one({"id": event_id})
+    if not event:
+        return
+
     metadata = stripe_metadata(session)
     target_tier = metadata.get("target_tier")
     purchase_type = metadata.get("purchase_type", "event")
+    session_id = stripe_value(session, "id")
+
+    if purchase_type == "upload_extension":
+        if event.get("last_extension_session_id") == session_id:
+            return
+        await apply_upload_extension(event_id)
+        await db.events.update_one(
+            {"id": event_id},
+            {
+                "$set": {
+                    "last_extension_session_id": session_id,
+                    "last_extension_payment_intent": stripe_value(session, "payment_intent"),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            },
+        )
+        return
+
+    if purchase_type == "upgrade" and event.get("last_upgrade_session_id") == session_id:
+        return
+
     if target_tier:
         await apply_event_plan(event_id, target_tier)
 
     payment_updates = {
-        "stripe_checkout_session_id": stripe_value(session, "id"),
+        "stripe_checkout_session_id": session_id,
         "stripe_payment_intent": stripe_value(session, "payment_intent"),
         "paid_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -237,6 +277,23 @@ async def mark_event_paid(event_id: str, session) -> None:
         {"id": event_id},
         {"$set": payment_updates},
     )
+
+
+async def sync_saved_addon_session(event: dict, field_name: str) -> bool:
+    session_id = event.get(field_name)
+    if not session_id:
+        return False
+
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+    except Exception:
+        return False
+
+    if stripe_value(session, "payment_status") == "paid" or stripe_value(session, "status") == "complete":
+        await mark_event_paid(event["id"], session)
+        return True
+
+    return False
 
 
 async def find_recent_paid_session_for_event(event_id: str):
@@ -262,6 +319,9 @@ async def find_recent_paid_session_for_event(event_id: str):
 
 
 async def sync_event_payment_status(event: dict, allow_recent_lookup: bool = True) -> str:
+    await sync_saved_addon_session(event, "stripe_upgrade_session_id")
+    await sync_saved_addon_session(event, "stripe_upload_extension_session_id")
+
     if event.get("payment_status") == "paid":
         return "paid"
 
@@ -305,6 +365,11 @@ async def get_payment_config():
             f"{from_tier}_to_{to_tier}": product_id
             for (from_tier, to_tier), product_id in APPLE_UPGRADE_PRODUCTS.items()
         },
+        "upload_extension": {
+            "hours": UPLOAD_EXTENSION["hours"],
+            "display_price_gbp": UPLOAD_EXTENSION["display_price_gbp"],
+            "apple_product_id": UPLOAD_EXTENSION["apple_product_id"],
+        },
         "apple_prices": APPLE_PRODUCT_PRICES,
     }
 
@@ -338,7 +403,9 @@ async def create_event_checkout(checkout_input: EventCheckoutCreate):
 
     current_tier = event.get("event_tier", "prime")
     target_tier = checkout_input.target_tier or current_tier
+    purchase_type = checkout_input.purchase_type or "event"
     is_upgrade = target_tier != current_tier
+    is_extension = purchase_type == "upload_extension"
     if target_tier not in EVENT_PLANS:
         raise HTTPException(status_code=400, detail="Unsupported event package.")
 
@@ -346,7 +413,7 @@ async def create_event_checkout(checkout_input: EventCheckoutCreate):
         event,
         allow_recent_lookup=bool(event.get("stripe_checkout_session_id")),
     )
-    if payment_status == "paid" and not is_upgrade:
+    if payment_status == "paid" and not is_upgrade and not is_extension:
         return EventCheckoutResponse(
             checkout_url="",
             checkout_session_id=event.get("stripe_checkout_session_id") or "",
@@ -354,7 +421,7 @@ async def create_event_checkout(checkout_input: EventCheckoutCreate):
         )
 
     existing_session_id = event.get("stripe_checkout_session_id")
-    if existing_session_id and not is_upgrade:
+    if existing_session_id and not is_upgrade and not is_extension:
         try:
             existing_session = stripe.checkout.Session.retrieve(existing_session_id)
             if (
@@ -378,8 +445,21 @@ async def create_event_checkout(checkout_input: EventCheckoutCreate):
 
     if is_upgrade and payment_status != "paid":
         raise HTTPException(status_code=400, detail="Complete the original event payment before upgrading.")
+    if is_extension and payment_status != "paid":
+        raise HTTPException(status_code=400, detail="Complete the original event payment before extending uploads.")
 
-    if is_upgrade:
+    if is_extension:
+        line_item = {
+            "price_data": {
+                "currency": "gbp",
+                "product_data": {
+                    "name": f"Stag & Hen 24 hour upload extension for {event.get('event_name', 'event')}",
+                },
+                "unit_amount": UPLOAD_EXTENSION["amount_pence"],
+            },
+            "quantity": 1,
+        }
+    elif is_upgrade:
         line_item = {
             "price_data": {
                 "currency": "gbp",
@@ -405,7 +485,7 @@ async def create_event_checkout(checkout_input: EventCheckoutCreate):
                 "event_id": event["id"],
                 "event_tier": current_tier,
                 "target_tier": target_tier,
-                "purchase_type": "upgrade" if is_upgrade else "event",
+                "purchase_type": "upload_extension" if is_extension else ("upgrade" if is_upgrade else "event"),
                 "owner_name": event.get("owner_name", ""),
             },
             success_url=f"{public_url}/payment-success?event_id={event['id']}&session_id={{CHECKOUT_SESSION_ID}}",
@@ -419,8 +499,11 @@ async def create_event_checkout(checkout_input: EventCheckoutCreate):
         {
             "$set": {
                 "updated_at": datetime.now(timezone.utc).isoformat(),
-                **({} if is_upgrade else {"payment_status": "pending"}),
+                **({} if (is_upgrade or is_extension) else {"payment_status": "pending"}),
                 **(
+                    {"stripe_upload_extension_session_id": session.id}
+                    if is_extension
+                    else
                     {"stripe_upgrade_session_id": session.id}
                     if is_upgrade
                     else {"stripe_checkout_session_id": session.id}
@@ -448,8 +531,12 @@ async def complete_ios_iap_purchase(purchase_input: IOSIAPComplete):
 
     current_tier = event.get("event_tier", "prime")
     target_tier = purchase_input.target_tier or current_tier
+    purchase_type = purchase_input.purchase_type or "event"
+    is_extension = purchase_type == "upload_extension"
     is_upgrade = target_tier != current_tier
-    if is_upgrade:
+    if is_extension:
+        expected_product_id = UPLOAD_EXTENSION["apple_product_id"]
+    elif is_upgrade:
         expected_product_id = APPLE_UPGRADE_PRODUCTS.get((current_tier, target_tier))
         if not expected_product_id:
             raise HTTPException(status_code=400, detail="Unsupported Apple upgrade package.")
@@ -487,7 +574,9 @@ async def complete_ios_iap_purchase(purchase_input: IOSIAPComplete):
         )
 
     now = datetime.now(timezone.utc).isoformat()
-    if is_upgrade:
+    if is_extension:
+        await apply_upload_extension(event["id"])
+    elif is_upgrade:
         await apply_event_plan(event["id"], target_tier)
 
     await db.events.update_one(
@@ -507,6 +596,14 @@ async def complete_ios_iap_purchase(purchase_input: IOSIAPComplete):
                         "last_upgraded_at": now,
                     }
                     if is_upgrade
+                    else {}
+                ),
+                **(
+                    {
+                        "last_ios_upload_extension_transaction_id": apple_transaction_id,
+                        "last_upload_extension_at": now,
+                    }
+                    if is_extension
                     else {}
                 ),
                 "paid_at": now,
@@ -550,7 +647,7 @@ async def stripe_webhook(request: Request):
         session = event["data"]["object"]
         metadata = stripe_metadata(session)
         event_id = metadata.get("event_id") or stripe_value(session, "client_reference_id")
-        if event_id and metadata.get("purchase_type") != "upgrade":
+        if event_id and metadata.get("purchase_type") not in {"upgrade", "upload_extension"}:
             await db.events.update_one(
                 {"id": event_id},
                 {

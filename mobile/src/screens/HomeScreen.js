@@ -57,6 +57,7 @@ const HomeScreen = ({ navigation }) => {
   const [deletingData, setDeletingData] = useState(false);
   const [startingCheckout, setStartingCheckout] = useState(false);
   const [upgradingTier, setUpgradingTier] = useState(null);
+  const [extendingUploads, setExtendingUploads] = useState(false);
 
   const loadData = useCallback(async () => {
     if (isPreview) {
@@ -84,17 +85,19 @@ const HomeScreen = ({ navigation }) => {
     }
 
     try {
-      const [eventRes, kittyRes, membersRes, leaderboardRes] = await Promise.all([
+      let [eventRes, kittyRes, membersRes, leaderboardRes] = await Promise.all([
         eventsApi.getById(session.event_id),
         kittyApi.getBalance(session.event_id),
         eventsApi.getMembers(session.event_id),
         pointsApi.getLeaderboard(session.event_id),
       ]);
-      const nextEvent = { ...eventRes.data };
-      if (isOwner && session?.owner_pin && nextEvent.payment_status !== 'paid') {
+      let nextEvent = { ...eventRes.data };
+      if (isOwner && session?.owner_pin) {
         try {
           const paymentRes = await paymentsApi.getEventStatus(session.event_id, session.owner_pin);
           if (paymentRes.data?.payment_status) {
+            eventRes = await eventsApi.getById(session.event_id);
+            nextEvent = { ...eventRes.data };
             nextEvent.payment_status = paymentRes.data.payment_status;
           }
         } catch (paymentError) {
@@ -114,6 +117,9 @@ const HomeScreen = ({ navigation }) => {
         sessionUpdates.event_tier = nextEvent.event_tier;
         sessionUpdates.event_tier_price = nextEvent.event_tier_price;
         sessionUpdates.media_delete_policy = nextEvent.media_delete_policy;
+      }
+      if (nextEvent.upload_extension_hours !== session.upload_extension_hours) {
+        sessionUpdates.upload_extension_hours = nextEvent.upload_extension_hours || 0;
       }
       if (Object.keys(sessionUpdates).length > 0) {
         await updateSession(sessionUpdates);
@@ -177,6 +183,7 @@ const HomeScreen = ({ navigation }) => {
     event_date: eventDate,
     event_end_date: eventEndDate,
     event_tier: currentTier,
+    upload_extension_hours: event?.upload_extension_hours ?? session.upload_extension_hours,
   });
   const availableUpgrades = EVENT_PLAN_ORDER
     .slice(EVENT_PLAN_ORDER.indexOf(currentTier) + 1)
@@ -308,6 +315,28 @@ const HomeScreen = ({ navigation }) => {
       Alert.alert('Upgrade Error', detail);
     } finally {
       setUpgradingTier(null);
+    }
+  };
+
+  const startUploadExtension = async () => {
+    if (!session?.event_id || !session?.owner_pin) return;
+    setExtendingUploads(true);
+    try {
+      const response = await paymentsApi.createEventCheckout({
+        event_id: session.event_id,
+        owner_pin: session.owner_pin,
+        purchase_type: 'upload_extension',
+      });
+      const checkoutUrl = response.data?.checkout_url;
+      if (checkoutUrl) {
+        await Linking.openURL(checkoutUrl);
+        Alert.alert('Extension Started', 'Complete Stripe Checkout, then return to the app and pull down to refresh.');
+      }
+    } catch (error) {
+      const detail = error?.response?.data?.detail || error?.message || 'Could not start the upload extension payment.';
+      Alert.alert('Extension Error', detail);
+    } finally {
+      setExtendingUploads(false);
     }
   };
 
@@ -542,6 +571,23 @@ const HomeScreen = ({ navigation }) => {
                   </Text>
                 </View>
               </View>
+              <View style={styles.upgradeRow}>
+                <View style={styles.upgradeTextBlock}>
+                  <Text style={styles.upgradeTitle}>Extend uploads by 24 hours</Text>
+                  <Text style={styles.upgradeDetail}>
+                    Add one extra day for crew to upload photos and videos. Media retention stays the same.
+                  </Text>
+                </View>
+                <Button
+                  title="£12.99"
+                  variant="primary"
+                  color={theme.accent}
+                  size="small"
+                  loading={extendingUploads}
+                  disabled={!!upgradingTier}
+                  onPress={startUploadExtension}
+                />
+              </View>
               {availableUpgrades.length > 0 ? (
                 <View style={styles.upgradeList}>
                   {availableUpgrades.map((tier) => {
@@ -559,6 +605,7 @@ const HomeScreen = ({ navigation }) => {
                           color={theme.accent}
                           size="small"
                           loading={upgradingTier === tier}
+                          disabled={extendingUploads || (!!upgradingTier && upgradingTier !== tier)}
                           onPress={() => startTierUpgrade(tier)}
                         />
                       </View>

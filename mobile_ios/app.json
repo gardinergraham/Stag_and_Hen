@@ -13,7 +13,7 @@
       "backgroundColor": "#0A0A0A"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "icon": "./assets/logo.png",
       "bundleIdentifier": "com.stagandhen.app",
       "infoPlist": {

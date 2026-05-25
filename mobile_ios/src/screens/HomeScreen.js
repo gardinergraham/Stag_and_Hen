@@ -98,8 +98,18 @@ const HomeScreen = ({ navigation }) => {
           const paymentRes = await paymentsApi.getEventStatus(session.event_id, session.owner_pin);
           if (paymentRes.data?.payment_status) {
             eventRes = await eventsApi.getById(session.event_id);
-            nextEvent = { ...eventRes.data };
-            nextEvent.payment_status = paymentRes.data.payment_status;
+            nextEvent = {
+              ...eventRes.data,
+              ...Object.fromEntries(
+                Object.entries({
+                  payment_status: paymentRes.data.payment_status,
+                  event_tier: paymentRes.data.event_tier,
+                  event_tier_price: paymentRes.data.event_tier_price,
+                  media_delete_policy: paymentRes.data.media_delete_policy,
+                  upload_extension_hours: paymentRes.data.upload_extension_hours,
+                }).filter(([, value]) => value !== undefined && value !== null)
+              ),
+            };
           }
         } catch (paymentError) {
           console.log('Could not refresh payment status:', paymentError?.response?.data || paymentError.message);
@@ -186,6 +196,10 @@ const HomeScreen = ({ navigation }) => {
     event_tier: currentTier,
     upload_extension_hours: event?.upload_extension_hours ?? session.upload_extension_hours,
   });
+  const showUploadExtension =
+    mediaWindows.hoursUntilUploadClose !== null &&
+    mediaWindows.hoursUntilUploadClose <= 48 &&
+    mediaWindows.hoursUntilUploadClose >= -24;
   const availableUpgrades = EVENT_PLAN_ORDER
     .slice(EVENT_PLAN_ORDER.indexOf(currentTier) + 1)
     .filter((tier) => EVENT_PLAN_INFO[tier]);
@@ -565,23 +579,25 @@ const HomeScreen = ({ navigation }) => {
                   </Text>
                 </View>
               </View>
-              <View style={styles.upgradeRow}>
-                <View style={styles.upgradeTextBlock}>
-                  <Text style={styles.upgradeTitle}>Extend uploads by 24 hours</Text>
-                  <Text style={styles.upgradeDetail}>
-                    Add one extra day for crew to upload photos and videos. Media retention stays the same.
-                  </Text>
+              {showUploadExtension && (
+                <View style={styles.upgradeRow}>
+                  <View style={styles.upgradeTextBlock}>
+                    <Text style={styles.upgradeTitle}>Extend uploads by 24 hours</Text>
+                    <Text style={styles.upgradeDetail}>
+                      Add one extra day for crew uploads. Media retention stays on this package.
+                    </Text>
+                  </View>
+                  <Button
+                    title="£12.99"
+                    variant="primary"
+                    color={theme.accent}
+                    size="small"
+                    loading={extendingUploads}
+                    disabled={!!upgradingTier}
+                    onPress={startUploadExtension}
+                  />
                 </View>
-                <Button
-                  title="£12.99"
-                  variant="primary"
-                  color={theme.accent}
-                  size="small"
-                  loading={extendingUploads}
-                  disabled={!!upgradingTier}
-                  onPress={startUploadExtension}
-                />
-              </View>
+              )}
               {availableUpgrades.length > 0 ? (
                 <View style={styles.upgradeList}>
                   {availableUpgrades.map((tier) => {

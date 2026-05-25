@@ -133,6 +133,9 @@ export const getEventMediaWindows = (event = {}) => {
   const uploadsOpen =
     !validStart ||
     (now >= validStart && (!uploadGraceEnd || now <= uploadGraceEnd));
+  const hoursUntilUploadClose = uploadGraceEnd
+    ? (uploadGraceEnd.getTime() - now.getTime()) / (1000 * 60 * 60)
+    : null;
 
   const downloadsOpen = !downloadUntil || now <= downloadUntil;
 
@@ -157,6 +160,7 @@ export const getEventMediaWindows = (event = {}) => {
     downloadStatus,
     uploadUntil: uploadGraceEnd?.toISOString?.() || null,
     downloadUntil: downloadUntil?.toISOString?.() || null,
+    hoursUntilUploadClose,
     uploadCountdownLabel: uploadGraceEnd
       ? getWindowCountdownLabel(uploadGraceEnd, { closedLabel: 'Uploads closed' })
       : 'Uploads open',

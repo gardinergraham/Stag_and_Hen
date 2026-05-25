@@ -18,6 +18,10 @@ class EventPaymentStatusResponse(BaseModel):
     event_id: str
     payment_status: str
     checkout_session_id: str | None = None
+    event_tier: str | None = None
+    event_tier_price: float | None = None
+    media_delete_policy: str | None = None
+    upload_extension_hours: int | None = None
 
 
 class IOSIAPComplete(BaseModel):

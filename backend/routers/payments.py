@@ -318,9 +318,24 @@ async def find_recent_paid_session_for_event(event_id: str):
     return None
 
 
+async def sync_recent_paid_addon_session(event: dict) -> bool:
+    session = await find_recent_paid_session_for_event(event["id"])
+    if not session:
+        return False
+
+    metadata = stripe_metadata(session)
+    if metadata.get("purchase_type") not in {"upgrade", "upload_extension"}:
+        return False
+
+    await mark_event_paid(event["id"], session)
+    return True
+
+
 async def sync_event_payment_status(event: dict, allow_recent_lookup: bool = True) -> str:
     await sync_saved_addon_session(event, "stripe_upgrade_session_id")
     await sync_saved_addon_session(event, "stripe_upload_extension_session_id")
+    if allow_recent_lookup:
+        await sync_recent_paid_addon_session(event)
 
     if event.get("payment_status") == "paid":
         return "paid"
@@ -381,10 +396,15 @@ async def get_event_payment_status(event_id: str, owner_pin: str):
         raise HTTPException(status_code=404, detail="Event not found or owner PIN is invalid.")
 
     payment_status = await sync_event_payment_status(event, allow_recent_lookup=True)
+    refreshed_event = await db.events.find_one({"id": event_id, "is_active": True}, {"_id": 0}) or event
     return EventPaymentStatusResponse(
         event_id=event_id,
         payment_status=payment_status,
-        checkout_session_id=event.get("stripe_checkout_session_id"),
+        checkout_session_id=refreshed_event.get("stripe_checkout_session_id"),
+        event_tier=refreshed_event.get("event_tier"),
+        event_tier_price=refreshed_event.get("event_tier_price"),
+        media_delete_policy=refreshed_event.get("media_delete_policy"),
+        upload_extension_hours=refreshed_event.get("upload_extension_hours", 0),
     )
 
 

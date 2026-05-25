@@ -19,8 +19,27 @@ import { colors, typography, spacing, getEventTheme } from '../theme';
 import { Card, Button } from '../components';
 import { eventsApi, kittyApi, pointsApi, paymentsApi } from '../services/api';
 import { useApp } from '../context/AppContext';
-import { formatEventDateRange, getCountdownLabel, getCountdownParts } from '../utils/eventDates';
-import { useEventIAPPurchase } from '../hooks/useEventIAPPurchase';
+import { formatEventDateRange, getCountdownLabel, getCountdownParts, getEventMediaWindows } from '../utils/eventDates';
+import { getEventUpgradeProductId, useEventIAPPurchase } from '../hooks/useEventIAPPurchase';
+
+const EVENT_PLAN_ORDER = ['one_day', 'extended', 'prime'];
+const EVENT_PLAN_INFO = {
+  one_day: {
+    name: 'One Day',
+    price: 25,
+    retention: 'Media is available until 24 hours after the event ends, then it is removed from the gallery.',
+  },
+  extended: {
+    name: 'Extended',
+    price: 55,
+    retention: 'Media is available for 30 days after the event ends.',
+  },
+  prime: {
+    name: 'Prime',
+    price: 95,
+    retention: 'Media is kept in the event gallery without an automatic deletion date.',
+  },
+};
 
 const HomeScreen = ({ navigation }) => {
   const { session, isOwner, logout, updateSession } = useApp();
@@ -38,6 +57,7 @@ const HomeScreen = ({ navigation }) => {
   const [awardingPoints, setAwardingPoints] = useState(false);
   const [deletingData, setDeletingData] = useState(false);
   const [startingCheckout, setStartingCheckout] = useState(false);
+  const [upgradingTier, setUpgradingTier] = useState(null);
 
   const loadData = useCallback(async () => {
     if (isPreview) {
@@ -90,6 +110,11 @@ const HomeScreen = ({ navigation }) => {
       if (nextEvent.event_date && nextEvent.event_date !== session.event_date) {
         sessionUpdates.event_date = nextEvent.event_date;
         sessionUpdates.event_end_date = nextEvent.event_end_date;
+      }
+      if (nextEvent.event_tier && nextEvent.event_tier !== session.event_tier) {
+        sessionUpdates.event_tier = nextEvent.event_tier;
+        sessionUpdates.event_tier_price = nextEvent.event_tier_price;
+        sessionUpdates.media_delete_policy = nextEvent.media_delete_policy;
       }
       if (Object.keys(sessionUpdates).length > 0) {
         await updateSession(sessionUpdates);
@@ -147,6 +172,16 @@ const HomeScreen = ({ navigation }) => {
   const countdown = getCountdownParts(eventDate);
   const paymentStatus = event?.payment_status || session?.payment_status || 'pending';
   const paymentRequired = isOwner && !isPreview && paymentStatus !== 'paid';
+  const currentTier = event?.event_tier || session.event_tier || 'prime';
+  const currentPlan = EVENT_PLAN_INFO[currentTier] || EVENT_PLAN_INFO.prime;
+  const mediaWindows = getEventMediaWindows({
+    event_date: eventDate,
+    event_end_date: eventEndDate,
+    event_tier: currentTier,
+  });
+  const availableUpgrades = EVENT_PLAN_ORDER
+    .slice(EVENT_PLAN_ORDER.indexOf(currentTier) + 1)
+    .filter((tier) => EVENT_PLAN_INFO[tier]);
 
   useEffect(() => {
     if (!paymentRequired) return;
@@ -241,6 +276,33 @@ const HomeScreen = ({ navigation }) => {
       Alert.alert('Payment Error', detail);
     } finally {
       setStartingCheckout(false);
+    }
+  };
+
+  const startTierUpgrade = async (targetTier) => {
+    if (!session?.event_id || !session?.owner_pin || !EVENT_PLAN_INFO[targetTier]) return;
+    const productId = getEventUpgradeProductId(currentTier, targetTier);
+    if (!productId) {
+      Alert.alert('Upgrade Unavailable', 'This Apple upgrade product has not been configured yet.');
+      return;
+    }
+
+    setUpgradingTier(targetTier);
+    try {
+      await purchaseEventPackage({
+        eventId: session.event_id,
+        ownerPin: session.owner_pin,
+        tier: currentTier,
+        targetTier,
+        productId,
+      });
+      await loadData();
+      Alert.alert('Upgrade Complete', 'Your event package has been updated.');
+    } catch (error) {
+      const detail = error?.response?.data?.detail || error?.message || 'Could not complete Apple upgrade.';
+      Alert.alert('Upgrade Error', detail);
+    } finally {
+      setUpgradingTier(null);
     }
   };
 
@@ -451,6 +513,57 @@ const HomeScreen = ({ navigation }) => {
                   onPress={() => navigation.navigate('ShareQR')}
                 />
               </View>
+            </Card.Content>
+          </Card>
+        )}
+
+        {isOwner && !isPreview && !paymentRequired && (
+          <Card style={[styles.packageCard, { borderColor: `${theme.accent}55` }]}>
+            <Card.Content>
+              <Text style={[styles.accessEyebrow, { color: theme.accent }]}>Package & Media</Text>
+              <Text style={styles.accessTitle}>{currentPlan.name} package</Text>
+              <Text style={styles.packageText}>{currentPlan.retention}</Text>
+              <View style={styles.windowCountdownGrid}>
+                <View style={styles.windowCountdownItem}>
+                  <Text style={styles.windowCountdownLabel}>Uploads Close</Text>
+                  <Text style={[styles.windowCountdownValue, { color: theme.accent }]}>
+                    {mediaWindows.uploadCountdownLabel}
+                  </Text>
+                </View>
+                <View style={styles.windowCountdownItem}>
+                  <Text style={styles.windowCountdownLabel}>Downloads Close</Text>
+                  <Text style={[styles.windowCountdownValue, { color: theme.accent }]}>
+                    {mediaWindows.downloadCountdownLabel}
+                  </Text>
+                </View>
+              </View>
+              {availableUpgrades.length > 0 ? (
+                <View style={styles.upgradeList}>
+                  {availableUpgrades.map((tier) => {
+                    const plan = EVENT_PLAN_INFO[tier];
+                    const upgradePrice = plan.price - currentPlan.price;
+                    return (
+                      <View key={tier} style={styles.upgradeRow}>
+                        <View style={styles.upgradeTextBlock}>
+                          <Text style={styles.upgradeTitle}>Upgrade to {plan.name}</Text>
+                          <Text style={styles.upgradeDetail}>{plan.retention}</Text>
+                        </View>
+                        <Button
+                          title={`£${upgradePrice.toFixed(2)}`}
+                          variant="primary"
+                          color={theme.accent}
+                          size="small"
+                          loading={upgradingTier === tier}
+                          disabled={!!upgradingTier && upgradingTier !== tier}
+                          onPress={() => startTierUpgrade(tier)}
+                        />
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <Text style={styles.packageText}>You already have the highest package.</Text>
+              )}
             </Card.Content>
           </Card>
         )}
@@ -773,6 +886,59 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: spacing.sm,
     marginTop: spacing.md,
+  },
+  packageCard: {
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+  },
+  packageText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginBottom: spacing.md,
+  },
+  windowCountdownGrid: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  windowCountdownItem: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    padding: spacing.sm,
+  },
+  windowCountdownLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+  },
+  windowCountdownValue: {
+    ...typography.body,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  upgradeList: {
+    gap: spacing.sm,
+  },
+  upgradeRow: {
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    padding: spacing.sm,
+    gap: spacing.sm,
+  },
+  upgradeTextBlock: {
+    gap: 2,
+  },
+  upgradeTitle: {
+    ...typography.body,
+    color: colors.text,
+    fontWeight: '700',
+  },
+  upgradeDetail: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    lineHeight: 20,
   },
   countdownHeader: {
     flexDirection: 'row',

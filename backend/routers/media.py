@@ -4,6 +4,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from datetime import datetime, timedelta, timezone
 from services.s3 import upload_bytes_to_s3
+from services.s3 import delete_s3_file_by_url
 
 from models.media import Media, MediaCreate
 
@@ -100,6 +101,9 @@ async def get_event_media(event_id: str):
                 media['delete_at'] = datetime.fromisoformat(media['delete_at'])
             # Skip media that should be deleted
             if media['delete_at'] < now:
+                for url in [media.get("file_url"), media.get("thumbnail_url")]:
+                    if url:
+                        delete_s3_file_by_url(url)
                 await db.media.update_one({"id": media['id']}, {"$set": {"is_deleted": True}})
                 continue
         result.append(media)

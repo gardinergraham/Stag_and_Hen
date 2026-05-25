@@ -56,6 +56,16 @@ TIER_TO_APPLE_PRODUCT = {
 
 APPLE_PRODUCT_TO_TIER = {product_id: tier for tier, product_id in TIER_TO_APPLE_PRODUCT.items()}
 
+APPLE_UPGRADE_PRODUCTS = {
+    ("one_day", "extended"): "com.stagandhen.upgrade.onedaytoextended",
+    ("one_day", "prime"): "com.stagandhen.upgrade.onedaytoprime",
+    ("extended", "prime"): "com.stagandhen.upgrade.extendedtoprime",
+}
+
+APPLE_UPGRADE_PRODUCT_TO_TIERS = {
+    product_id: tiers for tiers, product_id in APPLE_UPGRADE_PRODUCTS.items()
+}
+
 APPLE_PRODUCT_PRICES = {
     product_id: {
         "amount_pence": EVENT_PLANS[tier]["amount_pence"],
@@ -63,6 +73,14 @@ APPLE_PRODUCT_PRICES = {
     }
     for tier, product_id in TIER_TO_APPLE_PRODUCT.items()
 }
+
+APPLE_PRODUCT_PRICES.update({
+    product_id: {
+        "amount_pence": EVENT_PLANS[to_tier]["amount_pence"] - EVENT_PLANS[from_tier]["amount_pence"],
+        "currency": "gbp",
+    }
+    for (from_tier, to_tier), product_id in APPLE_UPGRADE_PRODUCTS.items()
+})
 
 
 def get_public_plan_config():

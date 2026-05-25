@@ -18,6 +18,12 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 
+def is_multi_day_event(start_date, end_date) -> bool:
+    if not start_date or not end_date:
+        return False
+    return end_date.date() > start_date.date()
+
+
 async def delete_event_data(event_ids: List[str]):
     """Permanently remove event-owned records from the database."""
     if not event_ids:
@@ -48,6 +54,12 @@ async def delete_event_data(event_ids: List[str]):
 @router.post("/", response_model=Event)
 async def create_event(event_input: EventCreate):
     """Create a new stag or hen event"""
+    if event_input.event_tier == "one_day" and is_multi_day_event(event_input.event_date, event_input.event_end_date):
+        raise HTTPException(
+            status_code=400,
+            detail="The One Day package is only available for events that start and end on the same day.",
+        )
+
     plan = EVENT_PLANS.get(event_input.event_tier, EVENT_PLANS["prime"])
     event = Event(
         event_name=event_input.event_name,

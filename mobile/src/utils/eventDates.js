@@ -100,6 +100,17 @@ export const getCountdownLabel = (value) => {
   return `${countdown.days} day${countdown.days === 1 ? '' : 's'} to go`;
 };
 
+export const getWindowCountdownLabel = (value, { closedLabel = 'Closed', foreverLabel = 'No closing date' } = {}) => {
+  if (!value) return foreverLabel;
+  const countdown = getCountdownParts(value);
+  if (!countdown) return foreverLabel;
+  if (countdown.isPast) return closedLabel;
+  if (countdown.days === 0) {
+    return `${countdown.hours || 1} hour${countdown.hours === 1 ? '' : 's'} left`;
+  }
+  return `${countdown.days} day${countdown.days === 1 ? '' : 's'} ${countdown.hours} hour${countdown.hours === 1 ? '' : 's'} left`;
+};
+
 export const getEventMediaWindows = (event = {}) => {
   const now = new Date();
   const startDate = event.event_date ? new Date(event.event_date) : null;
@@ -120,9 +131,7 @@ export const getEventMediaWindows = (event = {}) => {
     !validStart ||
     (now >= validStart && (!uploadGraceEnd || now <= uploadGraceEnd));
 
-  const downloadsOpen =
-    !validEnd ||
-    (now >= validEnd && (!downloadUntil || now <= downloadUntil));
+  const downloadsOpen = !downloadUntil || now <= downloadUntil;
 
   const uploadStatus = (() => {
     if (!validStart) return 'Uploads are open';
@@ -132,10 +141,9 @@ export const getEventMediaWindows = (event = {}) => {
   })();
 
   const downloadStatus = (() => {
-    if (!validEnd) return 'Downloads are open';
-    if (now < validEnd) return `Downloads open after ${formatEventDate(validEnd)}`;
+    if (!validEnd) return 'Gallery downloads are open';
     if (downloadUntil && now > downloadUntil) return 'Download window has ended';
-    if (downloadUntil) return `Downloads available until ${formatEventDate(downloadUntil)}`;
+    if (downloadUntil) return `Downloads close in ${getWindowCountdownLabel(downloadUntil)} (${formatEventDate(downloadUntil)})`;
     return 'Downloads available forever';
   })();
 
@@ -144,6 +152,13 @@ export const getEventMediaWindows = (event = {}) => {
     downloadsOpen,
     uploadStatus,
     downloadStatus,
+    uploadUntil: uploadGraceEnd?.toISOString?.() || null,
     downloadUntil: downloadUntil?.toISOString?.() || null,
+    uploadCountdownLabel: uploadGraceEnd
+      ? getWindowCountdownLabel(uploadGraceEnd, { closedLabel: 'Uploads closed' })
+      : 'Uploads open',
+    downloadCountdownLabel: downloadUntil
+      ? getWindowCountdownLabel(downloadUntil, { closedLabel: 'Downloads closed', foreverLabel: 'Forever' })
+      : 'Forever',
   };
 };

@@ -9,8 +9,17 @@ export const IOS_EVENT_IAP_PRODUCTS = {
   prime: 'com.stagandhen.event.prime',
 };
 
+export const IOS_EVENT_UPGRADE_PRODUCTS = {
+  one_day_to_extended: 'com.stagandhen.upgrade.onedaytoextended',
+  one_day_to_prime: 'com.stagandhen.upgrade.onedaytoprime',
+  extended_to_prime: 'com.stagandhen.upgrade.extendedtoprime',
+};
+
 export const getEventIAPProductId = (tier = 'prime') =>
   IOS_EVENT_IAP_PRODUCTS[tier] || IOS_EVENT_IAP_PRODUCTS.prime;
+
+export const getEventUpgradeProductId = (fromTier, toTier) =>
+  IOS_EVENT_UPGRADE_PRODUCTS[`${fromTier}_to_${toTier}`];
 
 export const useEventIAPPurchase = () => {
   const pendingPurchaseRef = useRef(null);
@@ -26,16 +35,18 @@ export const useEventIAPPurchase = () => {
   } = useIAP({
     onPurchaseSuccess: async (purchase) => {
       const pending = pendingPurchaseRef.current;
-      if (!pending || purchase.productId !== pending.productId) return;
+      const purchasedProductId = purchase.productId || purchase.productID || purchase.id || pending?.productId;
+      if (!pending || purchasedProductId !== pending.productId) return;
       if (pending.timeoutId) clearTimeout(pending.timeoutId);
 
       try {
         const response = await paymentsApi.completeIOSIAP({
           event_id: pending.eventId,
           owner_pin: pending.ownerPin,
-          product_id: purchase.productId,
+          product_id: pending.productId,
           transaction_id: purchase.transactionId || purchase.id,
           purchase_token: purchase.purchaseToken || null,
+          target_tier: pending.targetTier || null,
         });
 
         if (finishTransactionRef.current) {
@@ -69,7 +80,7 @@ export const useEventIAPPurchase = () => {
   }, [finishTransaction]);
 
   const purchaseEventPackage = useCallback(
-    ({ eventId, ownerPin, tier }) => {
+    ({ eventId, ownerPin, tier, productId: productIdOverride, targetTier }) => {
       if (Platform.OS !== 'ios') {
         return Promise.reject(new Error('Apple in-app purchases are only available on iOS.'));
       }
@@ -80,7 +91,10 @@ export const useEventIAPPurchase = () => {
         return Promise.reject(new Error('Apple purchases are still connecting. Please try again in a moment.'));
       }
 
-      const productId = getEventIAPProductId(tier);
+      const productId = productIdOverride || getEventIAPProductId(tier);
+      if (!productId) {
+        return Promise.reject(new Error('This upgrade product is not configured yet.'));
+      }
       setPurchaseLoading(true);
 
       return new Promise(async (resolve, reject) => {
@@ -97,6 +111,7 @@ export const useEventIAPPurchase = () => {
           eventId,
           ownerPin,
           productId,
+          targetTier,
           resolve,
           reject,
           timeoutId,

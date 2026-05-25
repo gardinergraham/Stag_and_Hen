@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 class EventCheckoutCreate(BaseModel):
     event_id: str = Field(..., min_length=1)
     owner_pin: str = Field(..., min_length=1)
+    target_tier: str | None = None
 
 
 class EventCheckoutResponse(BaseModel):
@@ -24,3 +25,4 @@ class IOSIAPComplete(BaseModel):
     product_id: str = Field(..., min_length=1)
     transaction_id: str | None = None
     purchase_token: str | None = None
+    target_tier: str | None = None

@@ -566,7 +566,9 @@ export default function GalleryScreen(props) {
                       color="#FFD700"
                     />
                     <Text style={styles.windowBannerText}>
-                      {isOwner ? 'Owner upload access is open' : mediaWindows.uploadStatus}
+                      {isOwner
+                        ? `Owner upload access is open. Crew uploads close in ${mediaWindows.uploadCountdownLabel}.`
+                        : mediaWindows.uploadStatus}
                     </Text>
                   </View>
                   <View style={styles.windowBannerRow}>
@@ -576,7 +578,9 @@ export default function GalleryScreen(props) {
                       color="#8FAF7A"
                     />
                     <Text style={styles.windowBannerText}>
-                      {isOwner ? 'Owner downloads are available' : mediaWindows.downloadStatus}
+                      {isOwner
+                        ? `Owner downloads are available. Crew download window: ${mediaWindows.downloadCountdownLabel}.`
+                        : mediaWindows.downloadStatus}
                     </Text>
                   </View>
                 </View>

@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, AppState, ScrollView, View, Text, StyleSheet, Image } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, AppState, Linking, ScrollView, View, Text, StyleSheet, Image } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, typography, spacing } from '../theme';
@@ -12,11 +12,19 @@ const WelcomeScreen = ({ navigation }) => {
   const { login } = useApp();
   const [pendingEvent, setPendingEvent] = useState(null);
   const [checkingPayment, setCheckingPayment] = useState(false);
+  const [openingCheckout, setOpeningCheckout] = useState(false);
+  const autoOpenAttemptedRef = useRef(false);
 
   const checkPendingPayment = useCallback(async ({ showAlert = false } = {}) => {
     const pending = await sessionStorage.getPendingEventPayment();
     setPendingEvent(pending);
     if (!pending?.event_id || !pending?.owner_pin) return;
+    if (!pending.checkout_started) {
+      if (showAlert) {
+        Alert.alert('Payment Not Started', 'Open Stripe Checkout first, then check again after payment is complete.');
+      }
+      return;
+    }
 
     setCheckingPayment(true);
     try {
@@ -40,6 +48,62 @@ const WelcomeScreen = ({ navigation }) => {
       setCheckingPayment(false);
     }
   }, [login, navigation]);
+
+  const openStripeCheckout = useCallback(async () => {
+    const pending = pendingEvent || await sessionStorage.getPendingEventPayment();
+    if (!pending?.event_id || !pending?.owner_pin) return;
+
+    setOpeningCheckout(true);
+    try {
+      let checkoutUrl = pending.checkout_url;
+      let checkoutSessionId = pending.checkout_session_id;
+
+      if (!checkoutUrl) {
+        const response = await paymentsApi.createEventCheckout({
+          event_id: pending.event_id,
+          owner_pin: pending.owner_pin,
+        });
+
+        if (response.data?.payment_status === 'paid') {
+          const paidSession = { ...pending, payment_status: 'paid' };
+          await sessionStorage.clearPendingEventPayment();
+          setPendingEvent(null);
+          await login(paidSession);
+          navigation.replace('Main');
+          return;
+        }
+
+        checkoutUrl = response.data?.checkout_url;
+        checkoutSessionId = response.data?.checkout_session_id;
+      }
+
+      if (!checkoutUrl) {
+        Alert.alert('Payment Link Missing', 'Stripe did not return a checkout link. Please try again in a moment.');
+        return;
+      }
+
+      const nextPending = {
+        ...pending,
+        checkout_url: checkoutUrl,
+        checkout_session_id: checkoutSessionId,
+        checkout_started: true,
+        auto_open_checkout: false,
+      };
+      await sessionStorage.savePendingEventPayment(nextPending);
+      setPendingEvent(nextPending);
+      await Linking.openURL(checkoutUrl);
+    } catch (error) {
+      Alert.alert('Payment Error', error?.response?.data?.detail || error?.message || 'Could not open Stripe Checkout.');
+    } finally {
+      setOpeningCheckout(false);
+    }
+  }, [login, navigation, pendingEvent]);
+
+  useEffect(() => {
+    if (!pendingEvent?.auto_open_checkout || autoOpenAttemptedRef.current) return;
+    autoOpenAttemptedRef.current = true;
+    openStripeCheckout();
+  }, [openStripeCheckout, pendingEvent]);
 
   useFocusEffect(
     useCallback(() => {
@@ -97,10 +161,20 @@ const WelcomeScreen = ({ navigation }) => {
 
         {pendingEvent && (
           <View style={styles.pendingCard}>
-            <Text style={styles.pendingTitle}>Payment Check</Text>
+            <Text style={styles.pendingTitle}>Complete Event Payment</Text>
             <Text style={styles.pendingText}>
-              {pendingEvent.event_name} is waiting for Stripe confirmation.
+              {pendingEvent.checkout_started
+                ? `${pendingEvent.event_name} is waiting for Stripe confirmation.`
+                : `${pendingEvent.event_name} has been created. Open Stripe Checkout to activate it.`}
             </Text>
+            <Button
+              title={openingCheckout ? 'Opening Stripe...' : 'Open Stripe Checkout'}
+              variant="gold"
+              size="medium"
+              loading={openingCheckout}
+              onPress={openStripeCheckout}
+              style={styles.pendingButton}
+            />
             <Button
               title={checkingPayment ? 'Checking...' : 'Check Payment & Open Event'}
               variant="secondary"

@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
-  Linking,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, typography, spacing } from '../theme';
@@ -44,21 +43,21 @@ const CreateEventScreen = ({ navigation }) => {
       name: 'One Day',
       price: 25,
       media_delete_policy: '1_day',
-      detail: 'Media deletes after 24 hours',
+      detail: 'Media is removed from the gallery 24 hours after the event ends. You can upgrade later.',
     },
     {
       id: 'extended',
       name: 'Extended',
       price: 55,
       media_delete_policy: '1_month',
-      detail: 'Media kept for the month',
+      detail: 'Media stays available for 30 days after the event ends.',
     },
     {
       id: 'prime',
       name: 'Prime',
       price: 95,
       media_delete_policy: 'never',
-      detail: 'Media kept forever',
+      detail: 'Media is kept in the event gallery without an automatic deletion date.',
     },
   ];
 
@@ -117,10 +116,22 @@ const CreateEventScreen = ({ navigation }) => {
       nextValue.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0, 0);
     }
 
-    setForm((currentForm) => ({
-      ...currentForm,
-      [picker.field]: nextValue,
-    }));
+    setForm((currentForm) => {
+      const nextForm = {
+        ...currentForm,
+        [picker.field]: nextValue,
+      };
+      const resolvedEndDate = nextForm.event_end_date || getDefaultEndDate(nextForm.event_date);
+      if (nextForm.event_tier === 'one_day' && isMultiDayEvent(nextForm.event_date, resolvedEndDate)) {
+        return {
+          ...nextForm,
+          event_tier: 'extended',
+          event_tier_price: 55,
+          media_delete_policy: '1_month',
+        };
+      }
+      return nextForm;
+    });
   };
 
   const getDefaultEndDate = (startDate) => {
@@ -129,6 +140,18 @@ const CreateEventScreen = ({ navigation }) => {
     endDate.setHours(23, 59, 0, 0);
     return endDate;
   };
+
+  const isMultiDayEvent = (startDate, endDate) => {
+    if (!startDate || !endDate) return false;
+    const startDay = new Date(startDate);
+    const endDay = new Date(endDate);
+    startDay.setHours(0, 0, 0, 0);
+    endDay.setHours(0, 0, 0, 0);
+    return endDay.getTime() > startDay.getTime();
+  };
+
+  const resolvedEndForSelection = form.event_end_date || getDefaultEndDate(form.event_date);
+  const oneDayPackageDisabled = isMultiDayEvent(form.event_date, resolvedEndForSelection);
 
   const renderPickerRow = (label, field, mode) => {
     const date = form[field];
@@ -169,6 +192,11 @@ const CreateEventScreen = ({ navigation }) => {
       return;
     }
 
+    if (form.event_tier === 'one_day' && isMultiDayEvent(form.event_date, resolvedEndDate)) {
+      Alert.alert('Choose a Longer Package', 'The One Day package is only available for events that start and end on the same day.');
+      return;
+    }
+
     setLoading(true);
     try {
       const { event_date, event_end_date, ...eventForm } = form;
@@ -191,8 +219,8 @@ const CreateEventScreen = ({ navigation }) => {
         event_tier: event.event_tier,
         event_tier_price: event.event_tier_price,
         payment_status: event.payment_status,
+        checkout_started: false,
       };
-      await sessionStorage.savePendingEventPayment(pendingEventPayment);
 
       try {
         const checkoutResponse = await paymentsApi.createEventCheckout({
@@ -201,11 +229,19 @@ const CreateEventScreen = ({ navigation }) => {
         });
         const checkoutUrl = checkoutResponse.data?.checkout_url;
         if (checkoutUrl) {
-          await Linking.openURL(checkoutUrl);
+          const pendingWithCheckout = {
+            ...pendingEventPayment,
+            checkout_url: checkoutUrl,
+            checkout_session_id: checkoutResponse.data?.checkout_session_id,
+            checkout_started: false,
+            auto_open_checkout: true,
+          };
+          await sessionStorage.savePendingEventPayment(pendingWithCheckout);
           navigation.replace('Welcome');
           return;
         }
       } catch (checkoutError) {
+        await sessionStorage.savePendingEventPayment(pendingEventPayment);
         Alert.alert(
           'Event Created',
           checkoutError.response?.data?.detail
@@ -222,7 +258,13 @@ const CreateEventScreen = ({ navigation }) => {
         'Payment Needed',
         'Stripe Checkout did not return a payment link. Please try again.',
         [
-          { text: 'OK', onPress: () => navigation.replace('Welcome') },
+          {
+            text: 'OK',
+            onPress: async () => {
+              await sessionStorage.savePendingEventPayment(pendingEventPayment);
+              navigation.replace('Welcome');
+            },
+          },
         ]
       );
     } catch (error) {
@@ -332,22 +374,29 @@ const CreateEventScreen = ({ navigation }) => {
         <View style={styles.tierList}>
           {eventTiers.map((tier) => {
             const active = form.event_tier === tier.id;
+            const disabled = tier.id === 'one_day' && oneDayPackageDisabled;
             return (
             <TouchableOpacity
               key={tier.id}
               style={[
                 styles.tierOption,
                 active && styles.tierOptionActive,
+                disabled && styles.tierOptionDisabled,
               ]}
+              disabled={disabled}
               onPress={() => selectTier(tier)}
             >
               <View style={styles.tierHeader}>
-                <Text style={[styles.tierName, active && styles.tierNameActive]}>
+                <Text style={[styles.tierName, active && styles.tierNameActive, disabled && styles.tierTextDisabled]}>
                   {tier.name}
                 </Text>
-                <Text style={styles.tierPrice}>£{tier.price.toFixed(2)}</Text>
+                <Text style={[styles.tierPrice, disabled && styles.tierTextDisabled]}>
+                  £{tier.price.toFixed(2)}
+                </Text>
               </View>
-              <Text style={styles.tierDetail}>{tier.detail}</Text>
+              <Text style={[styles.tierDetail, disabled && styles.tierTextDisabled]}>
+                {disabled ? 'Only available for events that start and end on the same day.' : tier.detail}
+              </Text>
             </TouchableOpacity>
             );
           })}
@@ -487,6 +536,9 @@ const styles = StyleSheet.create({
     borderColor: colors.gold,
     backgroundColor: `${colors.gold}15`,
   },
+  tierOptionDisabled: {
+    opacity: 0.45,
+  },
   tierHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -508,6 +560,9 @@ const styles = StyleSheet.create({
   tierDetail: {
     ...typography.bodySmall,
     color: colors.textSecondary,
+  },
+  tierTextDisabled: {
+    color: colors.textMuted,
   },
   createButton: {
     marginTop: spacing.md,

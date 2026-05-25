@@ -55,6 +55,22 @@ def get_upgrade_amount_pence(current_tier: str, target_tier: str) -> int:
     return amount
 
 
+def infer_upgrade_target_tier(current_tier: str, amount_total: int | None) -> str | None:
+    if current_tier not in EVENT_PLANS or amount_total is None:
+        return None
+
+    for target_tier in EVENT_PLANS:
+        if target_tier == current_tier:
+            continue
+        try:
+            if get_upgrade_amount_pence(current_tier, target_tier) == int(amount_total):
+                return target_tier
+        except HTTPException:
+            continue
+
+    return None
+
+
 def normalize_datetime(value):
     if not value:
         return None
@@ -233,9 +249,21 @@ async def mark_event_paid(event_id: str, session) -> None:
         return
 
     metadata = stripe_metadata(session)
-    target_tier = metadata.get("target_tier")
     purchase_type = metadata.get("purchase_type", "event")
     session_id = stripe_value(session, "id")
+    target_tier = (
+        metadata.get("target_tier")
+        or (
+            event.get("pending_upgrade_target_tier")
+            if purchase_type == "upgrade" and event.get("stripe_upgrade_session_id") == session_id
+            else None
+        )
+        or (
+            infer_upgrade_target_tier(event.get("event_tier", "one_day"), stripe_value(session, "amount_total"))
+            if purchase_type == "upgrade"
+            else None
+        )
+    )
 
     if purchase_type == "upload_extension":
         if event.get("last_extension_session_id") == session_id:
@@ -253,7 +281,11 @@ async def mark_event_paid(event_id: str, session) -> None:
         )
         return
 
-    if purchase_type == "upgrade" and event.get("last_upgrade_session_id") == session_id:
+    if (
+        purchase_type == "upgrade"
+        and event.get("last_upgrade_session_id") == session_id
+        and (not target_tier or event.get("event_tier") == target_tier)
+    ):
         return
 
     if target_tier:
@@ -268,6 +300,8 @@ async def mark_event_paid(event_id: str, session) -> None:
     if purchase_type == "upgrade":
         payment_updates.update({
             "last_upgrade_session_id": stripe_value(session, "id"),
+            "last_upgrade_target_tier": target_tier,
+            "pending_upgrade_target_tier": None,
             "last_upgraded_at": datetime.now(timezone.utc).isoformat(),
         })
     else:
@@ -525,7 +559,10 @@ async def create_event_checkout(checkout_input: EventCheckoutCreate):
                     {"stripe_upload_extension_session_id": session.id}
                     if is_extension
                     else
-                    {"stripe_upgrade_session_id": session.id}
+                    {
+                        "stripe_upgrade_session_id": session.id,
+                        "pending_upgrade_target_tier": target_tier,
+                    }
                     if is_upgrade
                     else {"stripe_checkout_session_id": session.id}
                 ),

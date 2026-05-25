@@ -197,7 +197,7 @@ const HomeScreen = ({ navigation }) => {
   });
   const showUploadExtension =
     mediaWindows.hoursUntilUploadClose !== null &&
-    mediaWindows.hoursUntilUploadClose <= 48 &&
+    mediaWindows.hoursUntilUploadClose <= 24 &&
     mediaWindows.hoursUntilUploadClose >= -24;
   const availableUpgrades = EVENT_PLAN_ORDER
     .slice(EVENT_PLAN_ORDER.indexOf(currentTier) + 1)

@@ -249,20 +249,34 @@ async def mark_event_paid(event_id: str, session) -> None:
         return
 
     metadata = stripe_metadata(session)
-    purchase_type = metadata.get("purchase_type", "event")
     session_id = stripe_value(session, "id")
+    saved_purchase_type = None
+    if event.get("stripe_upgrade_session_id") == session_id:
+        saved_purchase_type = "upgrade"
+    elif event.get("stripe_upload_extension_session_id") == session_id:
+        saved_purchase_type = "upload_extension"
+
+    inferred_target_tier = infer_upgrade_target_tier(
+        event.get("event_tier", "one_day"),
+        stripe_value(session, "amount_total"),
+    )
+    purchase_type = (
+        metadata.get("purchase_type")
+        or saved_purchase_type
+        or (
+            "upgrade"
+            if event.get("payment_status") == "paid" and inferred_target_tier
+            else "event"
+        )
+    )
     target_tier = (
         metadata.get("target_tier")
         or (
             event.get("pending_upgrade_target_tier")
-            if purchase_type == "upgrade" and event.get("stripe_upgrade_session_id") == session_id
+            if purchase_type == "upgrade" and saved_purchase_type == "upgrade"
             else None
         )
-        or (
-            infer_upgrade_target_tier(event.get("event_tier", "one_day"), stripe_value(session, "amount_total"))
-            if purchase_type == "upgrade"
-            else None
-        )
+        or (inferred_target_tier if purchase_type == "upgrade" else None)
     )
 
     if purchase_type == "upload_extension":
@@ -292,19 +306,20 @@ async def mark_event_paid(event_id: str, session) -> None:
         await apply_event_plan(event_id, target_tier)
 
     payment_updates = {
-        "stripe_checkout_session_id": session_id,
         "stripe_payment_intent": stripe_value(session, "payment_intent"),
         "paid_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     if purchase_type == "upgrade":
         payment_updates.update({
-            "last_upgrade_session_id": stripe_value(session, "id"),
+            "stripe_upgrade_session_id": session_id,
+            "last_upgrade_session_id": session_id,
             "last_upgrade_target_tier": target_tier,
             "pending_upgrade_target_tier": None,
             "last_upgraded_at": datetime.now(timezone.utc).isoformat(),
         })
     else:
+        payment_updates["stripe_checkout_session_id"] = session_id
         payment_updates["payment_status"] = "paid"
 
     await db.events.update_one(

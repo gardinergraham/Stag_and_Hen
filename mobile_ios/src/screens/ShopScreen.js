@@ -184,6 +184,9 @@ const ShopScreen = () => {
             ? 'Gear, games and weekend essentials for the lads.'
             : 'Handbags, glam, games and party extras for the girls.'}
         </Text>
+        <Text style={styles.affiliateDisclosure}>
+          As an Amazon Associate, Stag & Hen may earn from qualifying purchases.
+        </Text>
         <Button
           title="Request an Item"
           variant="outline"
@@ -296,6 +299,11 @@ const styles = StyleSheet.create({
   subtitle: {
     ...typography.body,
     color: colors.textSecondary,
+    marginBottom: spacing.md,
+  },
+  affiliateDisclosure: {
+    ...typography.caption,
+    color: colors.textMuted,
     marginBottom: spacing.md,
   },
   requestButton: {

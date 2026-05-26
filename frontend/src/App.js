@@ -7,6 +7,7 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "https://stagandhen-pro
 const API_BASE_URL = `${BACKEND_URL}/api`;
 const ADMIN_USERNAME = "GrahamAdmin";
 const ADMIN_PASSWORD = "1234";
+const AMAZON_ASSOCIATE_TAG = "stagandhen-21";
 const heroBackgrounds = [
   {
     src: "/assets/images/henGirlsBack.webp",
@@ -25,6 +26,23 @@ const emptyShopForm = {
   affiliate_url: "",
   image_url: "",
   category: "other",
+};
+
+const withAmazonAssociateTag = (rawUrl) => {
+  const trimmedUrl = rawUrl.trim();
+  if (!trimmedUrl) return trimmedUrl;
+
+  try {
+    const url = new URL(trimmedUrl);
+    if (!url.hostname.toLowerCase().endsWith("amazon.co.uk")) {
+      return trimmedUrl;
+    }
+
+    url.searchParams.set("tag", AMAZON_ASSOCIATE_TAG);
+    return url.toString();
+  } catch {
+    return trimmedUrl;
+  }
 };
 const emptyDareForm = {
   text: "",
@@ -809,7 +827,7 @@ const AdminPage = () => {
         name: form.name.trim(),
         description: form.description.trim() || null,
         price,
-        affiliate_url: form.affiliate_url.trim(),
+        affiliate_url: withAmazonAssociateTag(form.affiliate_url),
         image_url: form.image_url.trim(),
         category: form.category,
       };
@@ -1197,6 +1215,9 @@ const AdminPage = () => {
               onChange={(event) => updateForm("affiliate_url", event.target.value)}
               placeholder="https://www.amazon.co.uk/dp/..."
             />
+            <span className="admin-field-hint">
+              Amazon.co.uk links are saved with Associates tag {AMAZON_ASSOCIATE_TAG}.
+            </span>
           </label>
 
           <label>

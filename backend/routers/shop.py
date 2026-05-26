@@ -3,15 +3,37 @@ from typing import List, Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 from datetime import datetime, timezone
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from models.shop import ShopItem, ShopItemCreate
 
 router = APIRouter(prefix="/shop", tags=["shop"])
+AMAZON_ASSOCIATE_TAG = "stagandhen-21"
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
+
+
+def with_amazon_associate_tag(url: str) -> str:
+    """Add the Amazon UK Associates tag to product URLs while leaving other shops alone."""
+    if not url:
+        return url
+
+    try:
+        parsed = urlparse(url.strip())
+    except ValueError:
+        return url
+
+    hostname = (parsed.netloc or "").lower()
+    if not hostname.endswith("amazon.co.uk"):
+        return url.strip()
+
+    query = [(key, value) for key, value in parse_qsl(parsed.query, keep_blank_values=True) if key.lower() != "tag"]
+    query.append(("tag", AMAZON_ASSOCIATE_TAG))
+
+    return urlunparse(parsed._replace(query=urlencode(query)))
 
 
 async def verify_shop_admin(
@@ -46,7 +68,7 @@ async def create_shop_item(
         name=item_input.name,
         description=item_input.description,
         price=item_input.price,
-        affiliate_url=item_input.affiliate_url,
+        affiliate_url=with_amazon_associate_tag(item_input.affiliate_url),
         image_url=item_input.image_url,
         category=item_input.category
     )
@@ -76,6 +98,7 @@ async def update_shop_item(
         raise HTTPException(status_code=404, detail="Item not found")
 
     update_data = item_input.model_dump()
+    update_data["affiliate_url"] = with_amazon_associate_tag(update_data["affiliate_url"])
     await db.shop_items.update_one({"id": item_id}, {"$set": update_data})
 
     updated_item = await db.shop_items.find_one({"id": item_id}, {"_id": 0})
@@ -164,4 +187,4 @@ async def track_affiliate_click(item_id: str, member_name: str, event_id: Option
     
     await db.affiliate_clicks.insert_one(click_doc)
     
-    return {"affiliate_url": item['affiliate_url']}
+    return {"affiliate_url": with_amazon_associate_tag(item['affiliate_url'])}

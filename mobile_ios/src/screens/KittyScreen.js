@@ -12,6 +12,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableWithoutFeedback,
+  Linking,
+  AppState,
 } from 'react-native';
 import { colors, typography, spacing } from '../theme';
 import { Card, Button, TextInput } from '../components';
@@ -32,6 +34,8 @@ const KittyScreen = () => {
   const [purpose, setPurpose] = useState('');
   const [ownerPin, setOwnerPin] = useState('');
   const [loading, setLoading] = useState(false);
+  const [connectStatus, setConnectStatus] = useState(null);
+  const [connectLoading, setConnectLoading] = useState(false);
 
   const parseAmount = (value) => Number.parseFloat(String(value).replace(',', '.'));
 
@@ -81,6 +85,14 @@ const KittyScreen = () => {
       ]);
       setBalance(balanceRes.data.balance);
       setTransactions(transactionsRes.data);
+      if (isOwner && session.owner_pin) {
+        try {
+          const connectRes = await kittyApi.getConnectStatus(session.event_id, session.owner_pin);
+          setConnectStatus(connectRes.data);
+        } catch (connectError) {
+          console.log('Could not load Stripe Connect status:', connectError?.response?.data || connectError.message);
+        }
+      }
     } catch (error) {
       console.error('Failed to load kitty:', error);
     }
@@ -88,6 +100,15 @@ const KittyScreen = () => {
 
   useEffect(() => {
     loadData();
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        loadData();
+      }
+    });
+    return () => subscription.remove();
   }, []);
 
   const onRefresh = useCallback(async () => {
@@ -111,19 +132,68 @@ const KittyScreen = () => {
 
     setLoading(true);
     try {
-      await kittyApi.contribute({
+      if (connectStatus && connectStatus.charges_enabled === false) {
+        Alert.alert('Kitty Payments Not Ready', 'The event owner needs to finish Stripe setup before real kitty payments can be collected.');
+        return;
+      }
+
+      const response = await kittyApi.createContributionCheckout({
         event_id: session.event_id,
         contributor_name: session.member_name,
         amount: numAmount,
         message: message || null,
       });
+      const checkoutUrl = response.data?.checkout_url;
+      if (!checkoutUrl) {
+        throw new Error('Stripe did not return a checkout link.');
+      }
       resetContributeForm();
-      await loadData();
-      Alert.alert('Thank You!', `£${numAmount.toFixed(2)} added to the kitty!`);
+      await Linking.openURL(checkoutUrl);
+      Alert.alert('Payment Started', 'Complete Stripe Checkout, then return to the app. The kitty balance will update after Stripe confirms the payment.');
     } catch (error) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to contribute');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const startConnect = async () => {
+    if (!isOwner || !session?.owner_pin) return;
+    setConnectLoading(true);
+    try {
+      const response = await kittyApi.startConnect({
+        event_id: session.event_id,
+        owner_pin: session.owner_pin,
+      });
+      const url = response.data?.onboarding_url;
+      setConnectStatus(response.data);
+      if (url) {
+        await Linking.openURL(url);
+      }
+    } catch (error) {
+      Alert.alert('Stripe Setup Error', error.response?.data?.detail || 'Could not start Stripe setup.');
+    } finally {
+      setConnectLoading(false);
+    }
+  };
+
+  const openConnectDashboard = async () => {
+    if (!isOwner || !session?.owner_pin) return;
+    setConnectLoading(true);
+    try {
+      const response = await kittyApi.openConnectDashboard({
+        event_id: session.event_id,
+        owner_pin: session.owner_pin,
+      });
+      const url = response.data?.dashboard_url || response.data?.onboarding_url;
+      setConnectStatus(response.data);
+      if (url) {
+        await Linking.openURL(url);
+      }
+    } catch (error) {
+      Alert.alert('Stripe Dashboard Error', error.response?.data?.detail || 'Could not open Stripe.');
+    } finally {
+      setConnectLoading(false);
     }
   };
 
@@ -187,6 +257,26 @@ const KittyScreen = () => {
       >
         <Text style={styles.title}>Group Kitty</Text>
         <Text style={styles.subtitle}>Pool money for drinks, activities & more</Text>
+
+        {isOwner && !isPreview && (
+          <Card style={styles.connectCard}>
+            <Card.Content>
+              <Text style={styles.connectTitle}>Kitty Payments</Text>
+              <Text style={styles.connectText}>
+                {connectStatus?.charges_enabled
+                  ? 'Stripe is ready. Crew payments can go straight into your connected kitty account.'
+                  : 'Set up Stripe once so crew can add real money to the kitty.'}
+              </Text>
+              <Button
+                title={connectStatus?.charges_enabled ? 'Open Stripe Dashboard' : 'Set Up Stripe'}
+                variant={connectStatus?.charges_enabled ? 'outline' : 'primary'}
+                loading={connectLoading}
+                onPress={connectStatus?.charges_enabled ? openConnectDashboard : startConnect}
+                style={styles.connectButton}
+              />
+            </Card.Content>
+          </Card>
+        )}
 
         {/* Balance Card */}
         <Card variant="glow" style={styles.balanceCard}>
@@ -262,7 +352,7 @@ const KittyScreen = () => {
         )}
 
         <Text style={styles.mockedNotice}>
-          💳 Payments are currently in test mode (MOCKED)
+          💳 Kitty payments use Stripe Checkout. Balance updates after Stripe confirms payment.
         </Text>
       </ScrollView>
 
@@ -418,6 +508,22 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     marginBottom: spacing.lg,
+  },
+  connectCard: {
+    marginBottom: spacing.lg,
+  },
+  connectTitle: {
+    ...typography.h3,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  connectText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    marginBottom: spacing.md,
+  },
+  connectButton: {
+    alignSelf: 'stretch',
   },
   balanceCard: {
     marginBottom: spacing.xl,

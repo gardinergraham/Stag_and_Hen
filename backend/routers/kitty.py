@@ -81,6 +81,59 @@ async def get_connect_account_status(event: dict) -> dict:
     return status
 
 
+async def complete_pending_kitty_transaction(transaction: dict) -> bool:
+    session_id = transaction.get("stripe_payment_id")
+    if not session_id or transaction.get("payment_status") != "pending":
+        return False
+
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+    except Exception:
+        return False
+
+    if getattr(session, "payment_status", None) != "paid" and getattr(session, "status", None) != "complete":
+        return False
+
+    now = datetime.now(timezone.utc).isoformat()
+    result = await db.kitty_transactions.update_one(
+        {"id": transaction["id"], "payment_status": "pending"},
+        {
+            "$set": {
+                "payment_status": "completed",
+                "stripe_payment_id": session_id,
+                "stripe_payment_intent": getattr(session, "payment_intent", None),
+                "completed_at": now,
+            }
+        },
+    )
+    if result.modified_count != 1:
+        return False
+
+    await db.events.update_one(
+        {"id": transaction["event_id"]},
+        {
+            "$inc": {"kitty_balance": float(transaction.get("amount", 0))},
+            "$set": {"updated_at": now},
+        },
+    )
+    return True
+
+
+async def sync_pending_kitty_payments(event_id: str) -> None:
+    pending = await db.kitty_transactions.find(
+        {
+            "event_id": event_id,
+            "transaction_type": "contribution",
+            "payment_status": "pending",
+            "stripe_payment_id": {"$exists": True, "$ne": None},
+        },
+        {"_id": 0},
+    ).to_list(25)
+
+    for transaction in pending:
+        await complete_pending_kitty_transaction(transaction)
+
+
 @router.post("/connect/start")
 async def start_kitty_connect(payload: KittyConnectStart):
     """Create or resume Stripe Connect onboarding for the event owner."""
@@ -334,6 +387,9 @@ async def get_kitty_balance(event_id: str):
     event = await db.events.find_one({"id": event_id, "is_active": True}, {"_id": 0})
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+
+    await sync_pending_kitty_payments(event_id)
+    event = await db.events.find_one({"id": event_id, "is_active": True}, {"_id": 0})
     
     return {
         "event_id": event_id,
@@ -348,6 +404,8 @@ async def get_kitty_transactions(event_id: str):
     event = await db.events.find_one({"id": event_id, "is_active": True})
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+
+    await sync_pending_kitty_payments(event_id)
     
     transactions = await db.kitty_transactions.find(
         {"event_id": event_id}, 

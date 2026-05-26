@@ -705,8 +705,8 @@ async def complete_kitty_contribution(session) -> None:
 
     amount = float(transaction.get("amount", 0))
     now = datetime.now(timezone.utc).isoformat()
-    await db.kitty_transactions.update_one(
-        {"id": transaction_id},
+    result = await db.kitty_transactions.update_one(
+        {"id": transaction_id, "payment_status": "pending"},
         {
             "$set": {
                 "payment_status": "completed",
@@ -716,6 +716,9 @@ async def complete_kitty_contribution(session) -> None:
             }
         },
     )
+    if result.modified_count != 1:
+        return
+
     await db.events.update_one(
         {"id": event_id},
         {

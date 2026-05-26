@@ -27,12 +27,8 @@ const KittyScreen = () => {
   const [transactions, setTransactions] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [showContribute, setShowContribute] = useState(false);
-  const [showWithdraw, setShowWithdraw] = useState(false);
   const [contributionAmount, setContributionAmount] = useState('');
-  const [withdrawAmount, setWithdrawAmount] = useState('');
   const [message, setMessage] = useState('');
-  const [purpose, setPurpose] = useState('');
-  const [ownerPin, setOwnerPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [connectStatus, setConnectStatus] = useState(null);
   const [connectLoading, setConnectLoading] = useState(false);
@@ -44,14 +40,6 @@ const KittyScreen = () => {
     setShowContribute(false);
     setContributionAmount('');
     setMessage('');
-  };
-
-  const resetWithdrawForm = () => {
-    Keyboard.dismiss();
-    setShowWithdraw(false);
-    setWithdrawAmount('');
-    setPurpose('');
-    setOwnerPin('');
   };
 
   const loadData = async () => {
@@ -204,36 +192,31 @@ const KittyScreen = () => {
       return;
     }
 
-    const numAmount = parseAmount(withdrawAmount);
-    if (!Number.isFinite(numAmount) || numAmount <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid amount.');
-      return;
-    }
-    if (!ownerPin) {
-      Alert.alert('PIN Required', 'Please enter your owner PIN.');
-      return;
-    }
-    if (!purpose) {
-      Alert.alert('Purpose Required', 'Please enter what the money is for.');
+    if (balance <= 0) {
+      Alert.alert('No Kitty Balance', 'There is no kitty balance to withdraw yet.');
       return;
     }
 
-    setLoading(true);
-    try {
-      await kittyApi.withdraw({
-        event_id: session.event_id,
-        owner_pin: ownerPin,
-        amount: numAmount,
-        purpose,
-      });
-      resetWithdrawForm();
-      await loadData();
-      Alert.alert('Withdrawn', `£${numAmount.toFixed(2)} withdrawn for: ${purpose}`);
-    } catch (error) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to withdraw');
-    } finally {
-      setLoading(false);
+    if (!connectStatus?.payouts_enabled && !connectStatus?.details_submitted) {
+      Alert.alert(
+        'Stripe Setup Needed',
+        'Finish Stripe setup first, then Stripe will handle payouts to your bank account.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Set Up Stripe', onPress: startConnect },
+        ]
+      );
+      return;
     }
+
+    Alert.alert(
+      `Withdraw £${balance.toFixed(2)}`,
+      'Stripe pays out the connected kitty balance to your bank account based on your Stripe payout schedule. If more funds are still being added, wait until the kitty is settled before withdrawing the total. Open Stripe to view the available balance, bank account, and payout details.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Open Stripe', onPress: openConnectDashboard },
+      ]
+    );
   };
 
   const formatDate = (dateStr) => {
@@ -293,10 +276,11 @@ const KittyScreen = () => {
               />
               {isOwner && (
                 <Button
-                  title="Withdraw"
+                  title={`Withdraw £${balance.toFixed(2)}`}
                   variant="outline"
                   size="medium"
-                  onPress={() => setShowWithdraw(true)}
+                  disabled={balance <= 0}
+                  onPress={handleWithdraw}
                   style={styles.balanceButton}
                 />
               )}
@@ -414,77 +398,6 @@ const KittyScreen = () => {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Withdraw Modal */}
-      <Modal visible={showWithdraw} animationType="slide" transparent>
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-            <View style={styles.modalTouchArea}>
-              <ScrollView
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={styles.modalScrollContent}
-              >
-                <View style={styles.modalContent}>
-                  <Text style={styles.modalTitle}>Withdraw from Kitty</Text>
-                  <TextInput
-                    label="Amount (£)"
-                    placeholder="e.g., 50"
-                    value={withdrawAmount}
-                    onChangeText={setWithdrawAmount}
-                    keyboardType="decimal-pad"
-                  />
-                  <Button
-                    title="Done"
-                    variant="outline"
-                    size="small"
-                    onPress={Keyboard.dismiss}
-                    style={styles.doneButton}
-                  />
-                  <TextInput
-                    label="What's it for?"
-                    placeholder="e.g., Round of drinks"
-                    value={purpose}
-                    onChangeText={setPurpose}
-                    returnKeyType="done"
-                    onSubmitEditing={Keyboard.dismiss}
-                  />
-                  <TextInput
-                    label="Owner PIN"
-                    placeholder="Your 4-digit PIN"
-                    value={ownerPin}
-                    onChangeText={(value) => {
-                      setOwnerPin(value);
-                      if (value.length >= 4) {
-                        Keyboard.dismiss();
-                      }
-                    }}
-                    keyboardType="number-pad"
-                    maxLength={4}
-                    secureTextEntry
-                  />
-                  <View style={styles.modalActions}>
-                    <Button
-                      title="Cancel"
-                      variant="outline"
-                      onPress={resetWithdrawForm}
-                      style={styles.modalButton}
-                    />
-                    <Button
-                      title="Withdraw"
-                      variant="primary"
-                      loading={loading}
-                      onPress={handleWithdraw}
-                      style={styles.modalButton}
-                    />
-                  </View>
-                </View>
-              </ScrollView>
-            </View>
-          </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
-      </Modal>
     </SafeAreaView>
   );
 };

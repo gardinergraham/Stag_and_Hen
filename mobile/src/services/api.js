@@ -147,9 +147,18 @@ export const daresApi = {
 // Kitty API
 export const kittyApi = {
   contribute: (data) => api.post('/kitty/contribute', data),
+  createContributionCheckout: (data) => api.post('/kitty/contribution-checkout', data),
   withdraw: (data) => api.post('/kitty/withdraw', data),
   getBalance: (eventId) => api.get(`/kitty/balance/${eventId}`),
   getTransactions: (eventId) => api.get(`/kitty/transactions/${eventId}`),
+  startConnect: (data) => api.post('/kitty/connect/start', data),
+  openConnectDashboard: (data) => api.post('/kitty/connect/dashboard', data),
+  getConnectStatus: (eventId, ownerPin) =>
+    api.get(`/kitty/connect/status/${eventId}`, {
+      params: {
+        owner_pin: ownerPin,
+      },
+    }),
 };
 
 // Points API

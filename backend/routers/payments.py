@@ -692,6 +692,39 @@ async def complete_ios_iap_purchase(purchase_input: IOSIAPComplete):
     )
 
 
+async def complete_kitty_contribution(session) -> None:
+    metadata = stripe_metadata(session)
+    transaction_id = metadata.get("kitty_transaction_id")
+    event_id = metadata.get("event_id") or stripe_value(session, "client_reference_id")
+    if not transaction_id or not event_id:
+        return
+
+    transaction = await db.kitty_transactions.find_one({"id": transaction_id})
+    if not transaction or transaction.get("payment_status") == "completed":
+        return
+
+    amount = float(transaction.get("amount", 0))
+    now = datetime.now(timezone.utc).isoformat()
+    await db.kitty_transactions.update_one(
+        {"id": transaction_id},
+        {
+            "$set": {
+                "payment_status": "completed",
+                "stripe_payment_id": stripe_value(session, "id"),
+                "stripe_payment_intent": stripe_value(session, "payment_intent"),
+                "completed_at": now,
+            }
+        },
+    )
+    await db.events.update_one(
+        {"id": event_id},
+        {
+            "$inc": {"kitty_balance": amount},
+            "$set": {"updated_at": now},
+        },
+    )
+
+
 @router.post("/stripe/webhook")
 async def stripe_webhook(request: Request):
     webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET")
@@ -713,12 +746,25 @@ async def stripe_webhook(request: Request):
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         metadata = stripe_metadata(session)
+        if metadata.get("purchase_type") == "kitty_contribution":
+            await complete_kitty_contribution(session)
+            return {"received": True}
+
         event_id = metadata.get("event_id") or stripe_value(session, "client_reference_id")
         if event_id:
             await mark_event_paid(event_id, session)
     elif event["type"] in {"checkout.session.expired", "payment_intent.payment_failed"}:
         session = event["data"]["object"]
         metadata = stripe_metadata(session)
+        if metadata.get("purchase_type") == "kitty_contribution":
+            transaction_id = metadata.get("kitty_transaction_id")
+            if transaction_id:
+                await db.kitty_transactions.update_one(
+                    {"id": transaction_id, "payment_status": "pending"},
+                    {"$set": {"payment_status": "failed"}},
+                )
+            return {"received": True}
+
         event_id = metadata.get("event_id") or stripe_value(session, "client_reference_id")
         if event_id and metadata.get("purchase_type") not in {"upgrade", "upload_extension"}:
             await db.events.update_one(

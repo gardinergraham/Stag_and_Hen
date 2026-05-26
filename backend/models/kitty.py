@@ -18,6 +18,18 @@ class KittyWithdrawal(BaseModel):
     purpose: str = Field(..., min_length=2, max_length=200)
 
 
+class KittyConnectStart(BaseModel):
+    event_id: str
+    owner_pin: str
+
+
+class KittyContributionCheckout(BaseModel):
+    event_id: str
+    contributor_name: str
+    amount: float = Field(..., gt=0)
+    message: Optional[str] = None
+
+
 class KittyTransaction(BaseModel):
     model_config = ConfigDict(extra="ignore")
     

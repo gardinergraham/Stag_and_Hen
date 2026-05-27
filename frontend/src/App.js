@@ -49,6 +49,10 @@ const emptyDareForm = {
   category: "warmup",
   event_type: "all",
 };
+const emptyDrinkCardForm = {
+  text: "",
+  event_type: "all",
+};
 const emptySpinnerPairForm = {
   title: "",
   left: "",
@@ -67,7 +71,6 @@ const dareCategories = [
   { id: "warmup", name: "Warm Up" },
   { id: "photo", name: "Photo Dare" },
   { id: "cheeky", name: "Cheeky" },
-  { id: "drinks", name: "Drinks" },
 ];
 
 // Header Component
@@ -622,6 +625,8 @@ const AdminPage = () => {
   const [dares, setDares] = useState([]);
   const [dareForm, setDareForm] = useState(emptyDareForm);
   const [selectedDare, setSelectedDare] = useState(null);
+  const [drinkCardForm, setDrinkCardForm] = useState(emptyDrinkCardForm);
+  const [selectedDrinkCard, setSelectedDrinkCard] = useState(null);
   const [spinnerPairs, setSpinnerPairs] = useState([]);
   const [spinnerPairForm, setSpinnerPairForm] = useState(emptySpinnerPairForm);
   const [selectedSpinnerPair, setSelectedSpinnerPair] = useState(null);
@@ -685,6 +690,10 @@ const AdminPage = () => {
     setDareForm((current) => ({ ...current, [key]: value }));
   };
 
+  const updateDrinkCardForm = (key, value) => {
+    setDrinkCardForm((current) => ({ ...current, [key]: value }));
+  };
+
   const updateSpinnerPairForm = (key, value) => {
     setSpinnerPairForm((current) => ({ ...current, [key]: value }));
   };
@@ -713,6 +722,13 @@ const AdminPage = () => {
     setStatus("");
   };
 
+  const resetDrinkCardForm = () => {
+    setSelectedDrinkCard(null);
+    setDrinkCardForm(emptyDrinkCardForm);
+    setError("");
+    setStatus("");
+  };
+
   const resetSpinnerPairForm = () => {
     setSelectedSpinnerPair(null);
     setSpinnerPairForm(emptySpinnerPairForm);
@@ -733,6 +749,16 @@ const AdminPage = () => {
       text: dare.text || "",
       category: dare.category || "warmup",
       event_type: dare.event_type || "all",
+    });
+    setError("");
+    setStatus("");
+  };
+
+  const selectDrinkCard = (card) => {
+    setSelectedDrinkCard(card);
+    setDrinkCardForm({
+      text: card.text || "",
+      event_type: card.event_type || "all",
     });
     setError("");
     setStatus("");
@@ -985,6 +1011,73 @@ const AdminPage = () => {
     }
   };
 
+  const handleDrinkCardSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setStatus("");
+
+    if (!drinkCardForm.text.trim()) {
+      setError("Please add the drinking game card text.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        text: drinkCardForm.text.trim(),
+        category: "drinks",
+        event_type: drinkCardForm.event_type,
+        event_id: null,
+      };
+
+      if (selectedDrinkCard) {
+        await axios.put(`${API_BASE_URL}/dares/${selectedDrinkCard.id}`, payload, {
+          params: getAdminParams(),
+        });
+        setStatus("Drinking game card updated.");
+      } else {
+        await axios.post(`${API_BASE_URL}/dares/`, payload, {
+          params: getAdminParams(),
+        });
+        setStatus("Drinking game card added to the app.");
+      }
+
+      setSelectedDrinkCard(null);
+      setDrinkCardForm(emptyDrinkCardForm);
+      await loadShopData();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Could not save this drinking game card.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDrinkCardDelete = async (card) => {
+    const confirmed = window.confirm(`Delete this drinking game card?\n\n"${card.text}"`);
+    if (!confirmed) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      await axios.delete(`${API_BASE_URL}/dares/${card.id}`, {
+        params: getAdminParams(),
+      });
+      if (selectedDrinkCard?.id === card.id) {
+        setSelectedDrinkCard(null);
+        setDrinkCardForm(emptyDrinkCardForm);
+      }
+      setStatus("Drinking game card deleted.");
+      await loadShopData();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Could not delete this drinking game card.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSpinnerPairSubmit = async (event) => {
     event.preventDefault();
     setError("");
@@ -1121,6 +1214,9 @@ const AdminPage = () => {
       setSaving(false);
     }
   };
+
+  const standardDares = dares.filter((dare) => dare.category !== "drinks");
+  const drinkingGameCards = dares.filter((dare) => dare.category === "drinks");
 
   if (!isAuthed) {
     return (
@@ -1400,14 +1496,14 @@ const AdminPage = () => {
             <ClipboardList size={20} />
             <div>
               <p>Global Dares</p>
-              <h2>{dares.length} Cards</h2>
+              <h2>{standardDares.length} Cards</h2>
             </div>
           </div>
           <div className="admin-product-list admin-dare-list">
-            {dares.length === 0 ? (
+            {standardDares.length === 0 ? (
               <p className="admin-empty-text">No dares have been added yet.</p>
             ) : (
-              dares.map((dare) => (
+              standardDares.map((dare) => (
                 <article
                   className={`admin-product-row ${selectedDare?.id === dare.id ? "admin-product-row-selected" : ""}`}
                   key={dare.id}
@@ -1418,6 +1514,85 @@ const AdminPage = () => {
                   </button>
                   <div className="admin-product-actions">
                     <button type="button" onClick={() => handleDareDelete(dare)} aria-label="Delete dare">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </aside>
+      </section>
+
+      <section className="admin-layout admin-dares-section">
+        <form className="admin-card admin-form" onSubmit={handleDrinkCardSubmit}>
+          <div className="admin-card-header">
+            {selectedDrinkCard ? <Save size={20} /> : <Plus size={20} />}
+            <div>
+              <p>{selectedDrinkCard ? "Editing Drinking Game" : "New Drinking Game"}</p>
+              <h1>{selectedDrinkCard ? "Update Drinking Game Card" : "Add Drinking Game Card"}</h1>
+            </div>
+          </div>
+
+          <label>
+            Card Text
+            <textarea
+              value={drinkCardForm.text}
+              onChange={(event) => updateDrinkCardForm("text", event.target.value)}
+              placeholder="e.g., Everyone who checked the group chat today takes a sip. Water counts."
+              rows={4}
+            />
+            <span className="admin-field-hint">
+              These cards appear under Drinking Games in the app. Keep them optional and safe.
+            </span>
+          </label>
+
+          <label>
+            Event Type
+            <select value={drinkCardForm.event_type} onChange={(event) => updateDrinkCardForm("event_type", event.target.value)}>
+              <option value="all">All</option>
+              <option value="stag">Stag</option>
+              <option value="hen">Hen</option>
+            </select>
+          </label>
+
+          <div className="admin-form-actions">
+            <button className="btn btn-primary admin-submit" type="submit" disabled={saving}>
+              {selectedDrinkCard ? <Save size={18} /> : <Plus size={18} />}
+              {saving ? "Saving" : selectedDrinkCard ? "Update Card" : "Add Card"}
+            </button>
+            {selectedDrinkCard && (
+              <button className="btn btn-secondary admin-submit" type="button" onClick={resetDrinkCardForm}>
+                <X size={18} />
+                Cancel Edit
+              </button>
+            )}
+          </div>
+        </form>
+
+        <aside className="admin-card admin-preview">
+          <div className="admin-card-header">
+            <ClipboardList size={20} />
+            <div>
+              <p>Drinking Games</p>
+              <h2>{drinkingGameCards.length} Cards</h2>
+            </div>
+          </div>
+          <div className="admin-product-list admin-dare-list">
+            {drinkingGameCards.length === 0 ? (
+              <p className="admin-empty-text">No drinking game cards have been added yet.</p>
+            ) : (
+              drinkingGameCards.map((card) => (
+                <article
+                  className={`admin-product-row ${selectedDrinkCard?.id === card.id ? "admin-product-row-selected" : ""}`}
+                  key={card.id}
+                >
+                  <button className="admin-request-main" type="button" onClick={() => selectDrinkCard(card)}>
+                    <h3>{card.text}</h3>
+                    <p>drinks · {card.event_type}</p>
+                  </button>
+                  <div className="admin-product-actions">
+                    <button type="button" onClick={() => handleDrinkCardDelete(card)} aria-label="Delete drinking game card">
                       <Trash2 size={16} />
                     </button>
                   </div>

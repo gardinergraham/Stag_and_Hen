@@ -1129,10 +1129,10 @@ const DaresScreen = ({ navigation }) => {
             <Text style={styles.dareText}>{currentDare.text}</Text>
             <Text style={[styles.dareSource, { color: theme.accent }]}>
               {currentDare.source === 'owner'
-                ? 'Owner dare'
+                ? selectedGameMode === 'drinks' ? 'Owner card' : 'Owner dare'
                 : currentDare.source === 'admin'
-                ? 'Admin dare'
-                : 'Built-in dare'}
+                ? selectedGameMode === 'drinks' ? 'Admin card' : 'Admin dare'
+                : selectedGameMode === 'drinks' ? 'Built-in card' : 'Built-in dare'}
             </Text>
             <View style={styles.dareActions}>
               <Button

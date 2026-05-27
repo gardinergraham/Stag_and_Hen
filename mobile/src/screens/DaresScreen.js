@@ -19,7 +19,7 @@ import Svg, { Path } from 'react-native-svg';
 import { colors, typography, spacing, getEventTheme } from '../theme';
 import { Button, Card, TextInput } from '../components';
 import { useApp } from '../context/AppContext';
-import api, { daresApi, eventsApi } from '../services/api';
+import api, { daresApi, eventsApi, pointsApi } from '../services/api';
 
 const dareDecks = {
   warmup: [
@@ -108,6 +108,80 @@ const messagePrompts = [
   'Prediction',
 ];
 
+const henGameModes = [
+  {
+    id: 'purse',
+    title: 'Bag Game',
+    subtitle: 'Score what is in your bag',
+    icon: 'bag-handle',
+    category: null,
+  },
+  {
+    id: 'brideQuiz',
+    title: 'Bride Quiz',
+    subtitle: 'How well do you know her?',
+    icon: 'heart',
+    category: null,
+  },
+];
+
+const purseItems = [
+  { name: 'Gum or mints', points: 1 },
+  { name: 'Nail polish', points: 1 },
+  { name: 'Cash note', points: 1 },
+  { name: 'Tissue', points: 1 },
+  { name: 'Hand sanitizer', points: 1 },
+  { name: 'Lipstick', points: 1 },
+  { name: 'Lotion', points: 5 },
+  { name: 'Library card', points: 5 },
+  { name: 'Hair tie', points: 5 },
+  { name: 'Coupons', points: 5 },
+  { name: 'Chocolate', points: 5 },
+  { name: 'Receipts', points: 5 },
+  { name: 'Cell phone', points: 10 },
+  { name: 'Key', points: 10 },
+  { name: 'Lip balm', points: 10 },
+  { name: 'Credit card', points: 10 },
+  { name: 'Driving licence', points: 10 },
+  { name: 'Pen', points: 10 },
+  { name: 'Photo of the bride', points: 15 },
+  { name: 'Pepper spray', points: 15 },
+  { name: 'Underwear', points: 15 },
+  { name: 'Photo of the groom', points: 15 },
+  { name: 'Mini bottle', points: 15 },
+  { name: 'Foreign currency', points: 15 },
+  { name: 'Notebook', points: 20 },
+  { name: 'Medicine', points: 20 },
+  { name: 'Perfume', points: 20 },
+  { name: 'Toothbrush', points: 20 },
+  { name: 'Gift card', points: 20 },
+  { name: 'Movie ticket stub', points: 20 },
+  { name: 'Sewing kit', points: 25 },
+  { name: 'Band-aid', points: 25 },
+  { name: 'Postage stamp', points: 25 },
+  { name: 'Take-out menu', points: 25 },
+  { name: 'Spoon or fork', points: 25 },
+  { name: 'Passport', points: 25 },
+];
+
+const brideQuizQuestions = [
+  'What is her middle name?',
+  'When is her birthday?',
+  'What is her favourite food?',
+  'What is her shoe size?',
+  'Stay in or go out?',
+  'Call or text?',
+  'Singing or dancing?',
+  'When is the wedding date?',
+  'Where did she meet the groom?',
+  'Where did the groom propose?',
+  'How long has the bride dated the groom?',
+  'How many children does she want?',
+  'Is she a cat or dog person?',
+  'Red wine or white wine?',
+  'Lipstick or lip gloss?',
+];
+
 const spinnerPairs = [
   {
     id: 'drink-safe',
@@ -179,8 +253,14 @@ const DaresScreen = ({ navigation }) => {
   const [secretMission, setSecretMission] = useState(null);
   const [missionCompletions, setMissionCompletions] = useState([]);
   const [missionEvidence, setMissionEvidence] = useState('');
+  const [purseChecked, setPurseChecked] = useState({});
   const [loadingMission, setLoadingMission] = useState(false);
   const [completingMission, setCompletingMission] = useState(false);
+  const [awardVisible, setAwardVisible] = useState(false);
+  const [awardTarget, setAwardTarget] = useState(null);
+  const [awardPoints, setAwardPoints] = useState('10');
+  const [awardReason, setAwardReason] = useState('');
+  const [awardingPoints, setAwardingPoints] = useState(false);
   const [selectedMessagePrompt, setSelectedMessagePrompt] = useState(messagePrompts[0]);
   const [uploadingMessage, setUploadingMessage] = useState(false);
   const [spinning, setSpinning] = useState(false);
@@ -301,6 +381,7 @@ const DaresScreen = ({ navigation }) => {
     })),
   ];
   const selectedPair = availableSpinnerPairs.find((pair) => pair.id === selectedPairId) || availableSpinnerPairs[0];
+  const visibleGameModes = session?.event_type === 'hen' ? [...gameModes, ...henGameModes] : gameModes;
   const spinTargets = [
     ...members.map((member) => ({
       id: member.id || member.name,
@@ -311,6 +392,12 @@ const DaresScreen = ({ navigation }) => {
       ? [{ id: 'guest-of-honour', name: guestOfHonour, label: session?.event_type === 'stag' ? 'Groom' : 'Bride' }]
       : []),
   ].filter((target) => target.name);
+  const pointAwardTargets = spinTargets.filter((target) => target.label !== 'Owner');
+  const purseScore = purseItems.reduce((total, item) => (purseChecked[item.name] ? total + item.points : total), 0);
+  const purseGroups = [1, 5, 10, 15, 20, 25].map((points) => ({
+    points,
+    items: purseItems.filter((item) => item.points === points),
+  }));
 
   const spinCrewWheel = () => {
     if (spinning) return;
@@ -582,6 +669,65 @@ const DaresScreen = ({ navigation }) => {
     Alert.alert('Dare Complete', 'Nice. Add photo proof to the gallery if it deserves to live forever.');
   };
 
+  const togglePurseItem = (itemName) => {
+    setPurseChecked((current) => ({
+      ...current,
+      [itemName]: !current[itemName],
+    }));
+  };
+
+  const resetPurseScore = () => {
+    setPurseChecked({});
+  };
+
+  const canAwardPointsTo = (name, label) => Boolean(isOwner && name && label !== 'Owner');
+
+  const openPointAward = ({ memberName, reason, defaultPoints = '10' }) => {
+    if (session?.is_preview) {
+      Alert.alert('Preview Mode', 'Create an event to award real points.');
+      return;
+    }
+    if (!session?.event_id || !session?.owner_pin) {
+      Alert.alert('Owner Access Needed', 'Only the organiser can award points.');
+      return;
+    }
+    setAwardTarget(memberName);
+    setAwardReason(reason);
+    setAwardPoints(defaultPoints);
+    setAwardVisible(true);
+  };
+
+  const awardGamePoints = async () => {
+    const parsedPoints = Number.parseInt(awardPoints, 10);
+    if (!awardTarget || !Number.isFinite(parsedPoints) || parsedPoints <= 0) {
+      Alert.alert('Points Needed', 'Add a positive number of points.');
+      return;
+    }
+    if (!awardReason.trim()) {
+      Alert.alert('Reason Needed', 'Add what the points are for.');
+      return;
+    }
+
+    setAwardingPoints(true);
+    try {
+      await pointsApi.award(
+        {
+          event_id: session.event_id,
+          member_name: awardTarget,
+          points: parsedPoints,
+          reason: awardReason.trim(),
+        },
+        session.owner_pin
+      );
+      setAwardVisible(false);
+      Alert.alert('Points Awarded', `${awardTarget} received ${parsedPoints} points.`);
+    } catch (error) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Could not award points.');
+    } finally {
+      setAwardingPoints(false);
+    }
+  };
+
   const saveOwnerDare = async () => {
     if (!newDareText.trim()) {
       Alert.alert('Dare Needed', 'Add the dare text first.');
@@ -701,7 +847,7 @@ const DaresScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.modeGrid}>
-          {gameModes.map((mode) => {
+          {visibleGameModes.map((mode) => {
             const active = selectedGameMode === mode.id;
             return (
               <TouchableOpacity
@@ -793,6 +939,20 @@ const DaresScreen = ({ navigation }) => {
                 <Text style={[styles.spinnerAction, { color: theme.accent }]}>{spinnerResult.action}</Text>
                 <Text style={styles.spinnerDetail}>{spinnerResult.detail}</Text>
                 <Text style={styles.spinnerRole}>{spinnerResult.target.label}</Text>
+                {canAwardPointsTo(spinnerResult.target.name, spinnerResult.target.label) && (
+                  <TouchableOpacity
+                    style={[styles.inlineAwardButton, { borderColor: theme.accent }]}
+                    onPress={() =>
+                      openPointAward({
+                        memberName: spinnerResult.target.name,
+                        reason: `${spinnerResult.spinnerTitle}: ${spinnerResult.action}`,
+                      })
+                    }
+                  >
+                    <Ionicons name="trophy" size={16} color={theme.accent} />
+                    <Text style={[styles.inlineAwardText, { color: theme.accent }]}>Award points</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ) : (
               <Text style={styles.spinnerHint}>
@@ -862,6 +1022,19 @@ const DaresScreen = ({ navigation }) => {
                           {formatSpinTime(result.created_at) ? ` · ${formatSpinTime(result.created_at)}` : ''}
                         </Text>
                       </View>
+                      {canAwardPointsTo(result.target_name, result.target_label) && (
+                        <TouchableOpacity
+                          style={[styles.rowAwardButton, { borderColor: theme.accent }]}
+                          onPress={() =>
+                            openPointAward({
+                              memberName: result.target_name,
+                              reason: `${result.spinner_title}: ${result.action}`,
+                            })
+                          }
+                        >
+                          <Ionicons name="trophy" size={16} color={theme.accent} />
+                        </TouchableOpacity>
+                      )}
                     </View>
                   ))
                 )}
@@ -991,9 +1164,23 @@ const DaresScreen = ({ navigation }) => {
                         )}
                       </View>
                       {isOwner && (
-                        <TouchableOpacity onPress={() => deleteCompletedMission(mission)}>
-                          <Ionicons name="trash-outline" size={20} color={colors.error} />
-                        </TouchableOpacity>
+                        <View style={styles.missionRowActions}>
+                          <TouchableOpacity
+                            style={[styles.rowAwardButton, { borderColor: theme.accent }]}
+                            onPress={() =>
+                              openPointAward({
+                                memberName: mission.member_name,
+                                reason: `Secret mission: ${mission.mission_text}`,
+                                defaultPoints: '20',
+                              })
+                            }
+                          >
+                            <Ionicons name="trophy" size={16} color={theme.accent} />
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.rowDeleteButton} onPress={() => deleteCompletedMission(mission)}>
+                            <Ionicons name="trash-outline" size={20} color={colors.error} />
+                          </TouchableOpacity>
+                        </View>
                       )}
                     </View>
                   ))
@@ -1074,6 +1261,139 @@ const DaresScreen = ({ navigation }) => {
                 <Ionicons name="images" size={20} color={theme.accent} />
                 <Text style={[styles.photoProofText, { color: theme.accent }]}>View Gallery Messages</Text>
               </TouchableOpacity>
+            </Card.Content>
+          </Card>
+        )}
+
+        {selectedGameMode === 'purse' && (
+          <Card style={[styles.missionCard, { borderColor: `${theme.accent}66` }]}>
+            <Card.Content style={styles.missionContent}>
+              <View style={styles.missionHeader}>
+                <View>
+                  <Text style={[styles.dareLabel, { color: theme.accent }]}>Hen Party Game</Text>
+                  <Text style={styles.missionTitle}>What is in Your Bag?</Text>
+                </View>
+                <Ionicons name="bag-handle" size={24} color={theme.accent} />
+              </View>
+
+              <View style={[styles.purseScoreCard, { borderColor: theme.accent }]}>
+                <Text style={styles.spinnerHint}>Tap every item found in the bag.</Text>
+                <Text style={[styles.purseScoreValue, { color: theme.accent }]}>{purseScore} pts</Text>
+              </View>
+
+              {purseGroups.map((group) => (
+                <View key={group.points} style={styles.purseGroup}>
+                  <Text style={[styles.purseGroupTitle, { color: theme.accent }]}>{group.points} point{group.points === 1 ? '' : 's'}</Text>
+                  <View style={styles.purseGrid}>
+                    {group.items.map((item) => {
+                      const checked = Boolean(purseChecked[item.name]);
+                      return (
+                        <TouchableOpacity
+                          key={item.name}
+                          style={[
+                            styles.purseItem,
+                            checked && {
+                              borderColor: theme.accent,
+                              backgroundColor: `${theme.accent}22`,
+                            },
+                          ]}
+                          onPress={() => togglePurseItem(item.name)}
+                        >
+                          <Ionicons
+                            name={checked ? 'checkmark-circle' : 'ellipse-outline'}
+                            size={18}
+                            color={checked ? theme.accent : colors.textMuted}
+                          />
+                          <Text style={styles.purseItemText}>{item.name}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ))}
+
+              <Button
+                title="Reset Bag Score"
+                variant="outline"
+                color={theme.accent}
+                onPress={resetPurseScore}
+                style={styles.modalButton}
+              />
+
+              {isOwner && purseScore > 0 && (
+                <View>
+                  <Text style={styles.sectionTitle}>Award This Score</Text>
+                  <View style={styles.targetAwardGrid}>
+                    {pointAwardTargets.map((target) => (
+                      <TouchableOpacity
+                        key={target.id}
+                        style={[styles.targetAwardButton, { borderColor: theme.accent }]}
+                        onPress={() =>
+                          openPointAward({
+                            memberName: target.name,
+                            reason: `Bag game score: ${purseScore} pts`,
+                            defaultPoints: String(purseScore),
+                          })
+                        }
+                      >
+                        <Ionicons name="trophy" size={16} color={theme.accent} />
+                        <Text style={[styles.targetAwardText, { color: theme.accent }]}>{target.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </Card.Content>
+          </Card>
+        )}
+
+        {selectedGameMode === 'brideQuiz' && (
+          <Card style={[styles.missionCard, { borderColor: `${theme.accent}66` }]}>
+            <Card.Content style={styles.missionContent}>
+              <View style={styles.missionHeader}>
+                <View>
+                  <Text style={[styles.dareLabel, { color: theme.accent }]}>Hen Party Quiz</Text>
+                  <Text style={styles.missionTitle}>How Well Do You Know The Bride?</Text>
+                </View>
+                <Ionicons name="heart" size={24} color={theme.accent} />
+              </View>
+
+              <Text style={styles.secretMissionHint}>
+                Read the questions out, let everyone answer, then the organiser can award points for correct answers.
+              </Text>
+
+              <View style={styles.quizList}>
+                {brideQuizQuestions.map((question, index) => (
+                  <View key={question} style={styles.questionRow}>
+                    <Text style={[styles.questionNumber, { color: theme.accent }]}>{index + 1}</Text>
+                    <Text style={styles.completedText}>{question}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {isOwner && (
+                <View>
+                  <Text style={styles.sectionTitle}>Award Quiz Points</Text>
+                  <View style={styles.targetAwardGrid}>
+                    {pointAwardTargets.map((target) => (
+                      <TouchableOpacity
+                        key={target.id}
+                        style={[styles.targetAwardButton, { borderColor: theme.accent }]}
+                        onPress={() =>
+                          openPointAward({
+                            memberName: target.name,
+                            reason: 'How well do you know the bride quiz',
+                            defaultPoints: '10',
+                          })
+                        }
+                      >
+                        <Ionicons name="trophy" size={16} color={theme.accent} />
+                        <Text style={[styles.targetAwardText, { color: theme.accent }]}>{target.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
             </Card.Content>
           </Card>
         )}
@@ -1165,7 +1485,7 @@ const DaresScreen = ({ navigation }) => {
               <Text style={[styles.photoProofText, { color: theme.accent }]}>Manage Owner Games</Text>
             </TouchableOpacity>
           )}
-          {selectedGameMode !== 'spinner' && selectedGameMode !== 'missions' && selectedGameMode !== 'messages' && (
+          {selectedGameMode !== 'spinner' && selectedGameMode !== 'missions' && selectedGameMode !== 'messages' && selectedGameMode !== 'purse' && selectedGameMode !== 'brideQuiz' && (
             <TouchableOpacity
               style={[styles.photoProofButton, { borderColor: theme.accent }]}
               onPress={() => navigation.navigate('Gallery')}
@@ -1176,7 +1496,7 @@ const DaresScreen = ({ navigation }) => {
           )}
         </View>
 
-        {selectedGameMode !== 'spinner' && selectedGameMode !== 'missions' && selectedGameMode !== 'messages' && (
+        {selectedGameMode !== 'spinner' && selectedGameMode !== 'missions' && selectedGameMode !== 'messages' && selectedGameMode !== 'purse' && selectedGameMode !== 'brideQuiz' && (
           <>
         <Text style={styles.sectionTitle}>Recently Completed</Text>
         {completed.length === 0 ? (
@@ -1336,6 +1656,50 @@ const DaresScreen = ({ navigation }) => {
               )}
             </ScrollView>
             </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={awardVisible} animationType="fade" transparent>
+        <KeyboardAvoidingView
+          style={styles.awardModalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.awardModalCard}>
+            <Text style={styles.modalTitle}>Award Points</Text>
+            <Text style={styles.awardTarget}>{awardTarget}</Text>
+            <TextInput
+              label="Points"
+              value={awardPoints}
+              onChangeText={setAwardPoints}
+              keyboardType="number-pad"
+              placeholder="10"
+            />
+            <TextInput
+              label="Reason"
+              value={awardReason}
+              onChangeText={setAwardReason}
+              multiline
+              numberOfLines={3}
+              placeholder="Mission completed, spinner win, best photo proof..."
+            />
+            <View style={styles.dareActions}>
+              <Button
+                title="Cancel"
+                variant="outline"
+                color={theme.accent}
+                onPress={() => setAwardVisible(false)}
+                style={styles.dareButton}
+              />
+              <Button
+                title="Award"
+                variant="primary"
+                color={theme.accent}
+                loading={awardingPoints}
+                onPress={awardGamePoints}
+                style={styles.dareButton}
+              />
+            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -1534,6 +1898,21 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: spacing.sm,
   },
+  inlineAwardButton: {
+    minHeight: 38,
+    borderWidth: 1,
+    borderRadius: 19,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  inlineAwardText: {
+    ...typography.bodySmall,
+    fontWeight: '800',
+  },
   sharedSpinCard: {
     marginBottom: spacing.lg,
   },
@@ -1596,6 +1975,15 @@ const styles = StyleSheet.create({
   },
   sharedSpinTextWrap: {
     flex: 1,
+  },
+  rowAwardButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
   },
   sharedSpinText: {
     ...typography.bodySmall,
@@ -1691,6 +2079,99 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
     marginTop: spacing.xs,
+  },
+  purseScoreCard: {
+    borderWidth: 1,
+    borderRadius: 14,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  purseScoreValue: {
+    ...typography.h1,
+    marginTop: spacing.xs,
+  },
+  purseGroup: {
+    marginBottom: spacing.lg,
+  },
+  purseGroupTitle: {
+    ...typography.caption,
+    textTransform: 'uppercase',
+    fontWeight: '800',
+    marginBottom: spacing.sm,
+  },
+  purseGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  purseItem: {
+    width: '48%',
+    minHeight: 46,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  purseItemText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  quizList: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  questionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    padding: spacing.md,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    marginBottom: spacing.sm,
+  },
+  questionNumber: {
+    ...typography.bodySmall,
+    fontWeight: '900',
+    width: 24,
+  },
+  targetAwardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  targetAwardButton: {
+    minHeight: 42,
+    borderWidth: 1,
+    borderRadius: 21,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.background,
+  },
+  targetAwardText: {
+    ...typography.bodySmall,
+    fontWeight: '800',
+  },
+  missionRowActions: {
+    gap: spacing.sm,
+    alignItems: 'center',
+  },
+  rowDeleteButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
   },
   dareContent: {
     padding: spacing.lg,
@@ -1791,6 +2272,23 @@ const styles = StyleSheet.create({
   modalTitle: {
     ...typography.h2,
     color: colors.text,
+  },
+  awardModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.76)',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  awardModalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    padding: spacing.lg,
+  },
+  awardTarget: {
+    ...typography.h3,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    marginBottom: spacing.lg,
   },
   modalButton: {
     marginBottom: spacing.lg,

@@ -110,6 +110,8 @@ export const daresApi = {
     }),
   getSpinResults: (eventId) => api.get(`/dares/spin-results/${eventId}`),
   createSpinResult: (data) => api.post('/dares/spin-results', data),
+  getPurseScores: (eventId) => api.get(`/dares/purse-scores/${eventId}`),
+  createPurseScore: (data) => api.post('/dares/purse-scores', data),
   getSecretMission: (eventId, memberName) =>
     api.get(`/dares/secret-mission/${eventId}`, {
       params: {

@@ -254,6 +254,8 @@ const DaresScreen = ({ navigation }) => {
   const [missionCompletions, setMissionCompletions] = useState([]);
   const [missionEvidence, setMissionEvidence] = useState('');
   const [purseChecked, setPurseChecked] = useState({});
+  const [purseScores, setPurseScores] = useState([]);
+  const [submittingPurseScore, setSubmittingPurseScore] = useState(false);
   const [loadingMission, setLoadingMission] = useState(false);
   const [completingMission, setCompletingMission] = useState(false);
   const [awardVisible, setAwardVisible] = useState(false);
@@ -343,6 +345,16 @@ const DaresScreen = ({ navigation }) => {
     }
   };
 
+  const loadPurseScores = async () => {
+    if (session?.is_preview || !session?.event_id) return;
+    try {
+      const response = await daresApi.getPurseScores(session.event_id);
+      setPurseScores(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log('Could not load bag scores:', error?.response?.data || error.message);
+    }
+  };
+
   useEffect(() => {
     loadCustomDares();
     loadCustomSpinnerPairs();
@@ -350,6 +362,7 @@ const DaresScreen = ({ navigation }) => {
     loadRecentSpinResults();
     loadSecretMission();
     loadMissionCompletions();
+    loadPurseScores();
   }, [session?.event_id, session?.event_type]);
 
   useEffect(() => {
@@ -365,6 +378,13 @@ const DaresScreen = ({ navigation }) => {
     const interval = setInterval(loadMissionCompletions, 12000);
     return () => clearInterval(interval);
   }, [session?.event_id, session?.is_preview]);
+
+  useEffect(() => {
+    if (session?.is_preview || !session?.event_id || session?.event_type !== 'hen') return undefined;
+
+    const interval = setInterval(loadPurseScores, 12000);
+    return () => clearInterval(interval);
+  }, [session?.event_id, session?.event_type, session?.is_preview]);
 
   const availableSpinnerPairs = [
     ...spinnerPairs,
@@ -678,6 +698,50 @@ const DaresScreen = ({ navigation }) => {
 
   const resetPurseScore = () => {
     setPurseChecked({});
+  };
+
+  const submitPurseScore = async () => {
+    const memberName = session?.member_name || session?.owner_name;
+    const itemCount = Object.values(purseChecked).filter(Boolean).length;
+
+    if (!memberName) {
+      Alert.alert('Name Needed', 'Join the event with your name first.');
+      return;
+    }
+    if (purseScore <= 0) {
+      Alert.alert('No Bag Score', 'Tick the items found in the bag before sending the score.');
+      return;
+    }
+    if (session?.is_preview) {
+      const previewScore = {
+        id: `preview-bag-${Date.now()}`,
+        event_id: 'preview',
+        member_name: memberName,
+        score: purseScore,
+        item_count: itemCount,
+        created_at: new Date().toISOString(),
+      };
+      setPurseScores((current) => [previewScore, ...current].slice(0, 30));
+      Alert.alert('Score Sent', 'Preview bag score added to the board.');
+      return;
+    }
+
+    setSubmittingPurseScore(true);
+    try {
+      const response = await daresApi.createPurseScore({
+        event_id: session.event_id,
+        member_name: memberName,
+        score: purseScore,
+        item_count: itemCount,
+      });
+      const savedScore = response.data;
+      setPurseScores((current) => [savedScore, ...current.filter((item) => item.id !== savedScore.id)].slice(0, 30));
+      Alert.alert('Score Sent', 'Your bag score has been shared with the organiser.');
+    } catch (error) {
+      Alert.alert('Error', error?.response?.data?.detail || 'Could not send your bag score.');
+    } finally {
+      setSubmittingPurseScore(false);
+    }
   };
 
   const canAwardPointsTo = (name, label) => Boolean(isOwner && name && label !== 'Owner');
@@ -1319,6 +1383,55 @@ const DaresScreen = ({ navigation }) => {
                 onPress={resetPurseScore}
                 style={styles.modalButton}
               />
+              <Button
+                title="Send Score to Organiser"
+                variant="primary"
+                color={theme.accent}
+                loading={submittingPurseScore}
+                onPress={submitPurseScore}
+                style={styles.modalButton}
+              />
+
+              {isOwner && (
+                <View style={styles.bagScoreBoard}>
+                  <View style={styles.sharedSpinHeader}>
+                    <View>
+                      <Text style={[styles.dareLabel, { color: theme.accent }]}>Bag Scores</Text>
+                      <Text style={styles.sharedSpinTitle}>Sent to Organiser</Text>
+                    </View>
+                    <TouchableOpacity onPress={loadPurseScores} style={styles.sharedSpinIconButton}>
+                      <Ionicons name="refresh" size={20} color={theme.accent} />
+                    </TouchableOpacity>
+                  </View>
+                  {purseScores.length === 0 ? (
+                    <Text style={styles.spinnerHint}>Crew bag scores will show here when they send them.</Text>
+                  ) : (
+                    purseScores.slice(0, 8).map((score) => (
+                      <View key={score.id} style={styles.bagScoreRow}>
+                        <View style={styles.sharedSpinTextWrap}>
+                          <Text style={styles.sharedSpinText}>{score.member_name}</Text>
+                          <Text style={styles.sharedSpinMeta}>
+                            {score.item_count} item{score.item_count === 1 ? '' : 's'} found
+                          </Text>
+                        </View>
+                        <Text style={[styles.bagScorePoints, { color: theme.accent }]}>{score.score} pts</Text>
+                        <TouchableOpacity
+                          style={[styles.rowAwardButton, { borderColor: theme.accent }]}
+                          onPress={() =>
+                            openPointAward({
+                              memberName: score.member_name,
+                              reason: `Bag game score: ${score.score} pts`,
+                              defaultPoints: String(score.score),
+                            })
+                          }
+                        >
+                          <Ionicons name="trophy" size={16} color={theme.accent} />
+                        </TouchableOpacity>
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
 
               {isOwner && purseScore > 0 && (
                 <View>
@@ -2123,6 +2236,28 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textSecondary,
     flex: 1,
+  },
+  bagScoreBoard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  bagScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    marginBottom: spacing.sm,
+  },
+  bagScorePoints: {
+    ...typography.h3,
+    minWidth: 72,
+    textAlign: 'right',
   },
   quizList: {
     marginTop: spacing.lg,

@@ -43,6 +43,7 @@ async def delete_event_data(event_ids: List[str]):
     results["kitty_transactions"] = (await db.kitty_transactions.delete_many(event_query)).deleted_count
     results["point_awards"] = (await db.point_awards.delete_many(event_query)).deleted_count
     results["spin_results"] = (await db.spin_results.delete_many(event_query)).deleted_count
+    results["purse_scores"] = (await db.purse_scores.delete_many(event_query)).deleted_count
     results["secret_missions"] = (await db.secret_missions.delete_many(event_query)).deleted_count
     results["event_dares"] = (await db.dares.delete_many(event_query)).deleted_count
     results["event_spinner_pairs"] = (await db.spinner_pairs.delete_many(event_query)).deleted_count

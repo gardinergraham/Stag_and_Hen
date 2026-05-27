@@ -8,6 +8,8 @@ import random
 from models.dare import (
     Dare,
     DareCreate,
+    PurseScore,
+    PurseScoreCreate,
     SecretMission,
     SecretMissionAssign,
     SecretMissionCompleteRequest,
@@ -71,6 +73,12 @@ def normalize_spin_result(result):
     if isinstance(result.get("created_at"), str):
         result["created_at"] = datetime.fromisoformat(result["created_at"].replace("Z", "+00:00"))
     return result
+
+
+def normalize_purse_score(score):
+    if isinstance(score.get("created_at"), str):
+        score["created_at"] = datetime.fromisoformat(score["created_at"].replace("Z", "+00:00"))
+    return score
 
 
 def normalize_secret_mission(mission):
@@ -287,6 +295,38 @@ async def create_spin_result(result_input: SpinResultCreate):
     result_doc["created_at"] = result_doc["created_at"].isoformat()
     await db.spin_results.insert_one(result_doc)
     return result
+
+
+@router.get("/purse-scores/{event_id}", response_model=List[PurseScore])
+async def get_purse_scores(event_id: str, limit: int = 30):
+    event = await db.events.find_one({"id": event_id, "is_active": True})
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    capped_limit = min(max(limit, 1), 100)
+    scores = await db.purse_scores.find(
+        {"event_id": event_id, "is_active": True},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(capped_limit)
+    return [normalize_purse_score(score) for score in scores]
+
+
+@router.post("/purse-scores", response_model=PurseScore)
+async def create_purse_score(score_input: PurseScoreCreate):
+    event = await db.events.find_one({"id": score_input.event_id, "is_active": True})
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    score = PurseScore(
+        event_id=score_input.event_id,
+        member_name=score_input.member_name,
+        score=score_input.score,
+        item_count=score_input.item_count,
+    )
+    score_doc = score.model_dump()
+    score_doc["created_at"] = score_doc["created_at"].isoformat()
+    await db.purse_scores.insert_one(score_doc)
+    return score
 
 
 @router.get("/secret-mission-templates", response_model=List[SecretMissionTemplate])

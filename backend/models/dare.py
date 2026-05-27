@@ -83,6 +83,25 @@ class SpinResult(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class PurseScoreCreate(BaseModel):
+    event_id: str = Field(..., min_length=1)
+    member_name: str = Field(..., min_length=1, max_length=80)
+    score: int = Field(..., ge=0, le=1000)
+    item_count: int = Field(default=0, ge=0, le=200)
+
+
+class PurseScore(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    event_id: str
+    member_name: str
+    score: int
+    item_count: int = 0
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class SecretMissionAssign(BaseModel):
     event_id: str = Field(..., min_length=1)
     member_name: str = Field(..., min_length=1, max_length=80)

@@ -155,7 +155,7 @@ const Features = () => {
     {
       icon: <Wallet />,
       title: "Group Kitty",
-      description: "Collect contributions for drinks, activities, and surprises. The organizer can spend directly from the pot."
+      description: "Collect contributions for activities, taxis, outfits, and surprises. The organizer can spend directly from the pot."
     },
     {
       icon: <ShoppingBag />,
@@ -175,7 +175,7 @@ const Features = () => {
     {
       icon: <Gamepad2 />,
       title: "Party Games Hub",
-      description: "Dares, spinner choices, photo challenges, drinking games, and secret missions keep the whole group involved."
+      description: "Dares, spinner choices, photo challenges, party cards, and secret missions keep the whole group involved."
     },
     {
       icon: <Video />,
@@ -232,7 +232,7 @@ const AppPreview = () => (
             <li><Check size={20} /> Set auto-delete timers for sensitive content</li>
             <li><Check size={20} /> Collect money in the group kitty</li>
             <li><Check size={20} /> Shop for party essentials together</li>
-            <li><Check size={20} /> Play dares, spinner rounds, photo challenges and drinking games</li>
+            <li><Check size={20} /> Play dares, spinner rounds, photo challenges and party cards</li>
             <li><Check size={20} /> Give secret missions and award prize points</li>
             <li><Check size={20} /> Record video messages and advice for the bride or groom</li>
           </ul>
@@ -412,10 +412,10 @@ const TermsPage = () => (
             <p>We reserve the right to suspend or remove access to events, content, or accounts that breach these terms or are deemed harmful to the platform or its users.</p>
           </article>
           <article>
-            <h2>8. Drinking Games & Activities Disclaimer</h2>
+            <h2>8. Party Games & Activities Disclaimer</h2>
             <p>Stag & Hen may include party games, challenges, dares, and social activities that can involve alcoholic or non-alcoholic drinks. Participation in any activity is entirely voluntary and at the user’s own discretion.</p>
             <p>Users are solely responsible for their own behaviour, safety, wellbeing, and decisions while participating in activities organised through the platform. Stag & Hen does not encourage excessive drinking, dangerous behaviour, illegal activity, or actions that may cause harm to yourself or others.</p>
-            <p>By using the platform, you acknowledge that Stag & Hen accepts no responsibility or liability for any injury, damage, loss, illness, accidents, disputes, or consequences arising from participation in drinking games, challenges, dares, events, or related activities.</p>
+            <p>By using the platform, you acknowledge that Stag & Hen accepts no responsibility or liability for any injury, damage, loss, illness, accidents, disputes, or consequences arising from participation in party games, challenges, dares, events, or related activities.</p>
           </article>
           <p className="legal-updated">Last updated: May 2026</p>
         </div>
@@ -1017,7 +1017,7 @@ const AdminPage = () => {
     setStatus("");
 
     if (!drinkCardForm.text.trim()) {
-      setError("Please add the drinking game card text.");
+      setError("Please add the party card text.");
       return;
     }
 
@@ -1034,26 +1034,26 @@ const AdminPage = () => {
         await axios.put(`${API_BASE_URL}/dares/${selectedDrinkCard.id}`, payload, {
           params: getAdminParams(),
         });
-        setStatus("Drinking game card updated.");
+        setStatus("Party card updated.");
       } else {
         await axios.post(`${API_BASE_URL}/dares/`, payload, {
           params: getAdminParams(),
         });
-        setStatus("Drinking game card added to the app.");
+        setStatus("Party card added to the app.");
       }
 
       setSelectedDrinkCard(null);
       setDrinkCardForm(emptyDrinkCardForm);
       await loadShopData();
     } catch (err) {
-      setError(err.response?.data?.detail || "Could not save this drinking game card.");
+      setError(err.response?.data?.detail || "Could not save this party card.");
     } finally {
       setSaving(false);
     }
   };
 
   const handleDrinkCardDelete = async (card) => {
-    const confirmed = window.confirm(`Delete this drinking game card?\n\n"${card.text}"`);
+    const confirmed = window.confirm(`Delete this party card?\n\n"${card.text}"`);
     if (!confirmed) {
       return;
     }
@@ -1069,10 +1069,10 @@ const AdminPage = () => {
         setSelectedDrinkCard(null);
         setDrinkCardForm(emptyDrinkCardForm);
       }
-      setStatus("Drinking game card deleted.");
+      setStatus("Party card deleted.");
       await loadShopData();
     } catch (err) {
-      setError(err.response?.data?.detail || "Could not delete this drinking game card.");
+      setError(err.response?.data?.detail || "Could not delete this party card.");
     } finally {
       setSaving(false);
     }
@@ -1529,8 +1529,8 @@ const AdminPage = () => {
           <div className="admin-card-header">
             {selectedDrinkCard ? <Save size={20} /> : <Plus size={20} />}
             <div>
-              <p>{selectedDrinkCard ? "Editing Drinking Game" : "New Drinking Game"}</p>
-              <h1>{selectedDrinkCard ? "Update Drinking Game Card" : "Add Drinking Game Card"}</h1>
+              <p>{selectedDrinkCard ? "Editing Party Card" : "New Party Card"}</p>
+              <h1>{selectedDrinkCard ? "Update Party Card" : "Add Party Card"}</h1>
             </div>
           </div>
 
@@ -1539,11 +1539,11 @@ const AdminPage = () => {
             <textarea
               value={drinkCardForm.text}
               onChange={(event) => updateDrinkCardForm("text", event.target.value)}
-              placeholder="e.g., Everyone who checked the group chat today takes a sip. Water counts."
+              placeholder="e.g., Everyone who checked the group chat today tells a quick story."
               rows={4}
             />
             <span className="admin-field-hint">
-              These cards appear under Drinking Games in the app. Keep them optional and safe.
+              These cards appear under Party Cards in the app. Keep them optional and safe.
             </span>
           </label>
 
@@ -1574,13 +1574,13 @@ const AdminPage = () => {
           <div className="admin-card-header">
             <ClipboardList size={20} />
             <div>
-              <p>Drinking Games</p>
+              <p>Party Cards</p>
               <h2>{drinkingGameCards.length} Cards</h2>
             </div>
           </div>
           <div className="admin-product-list admin-dare-list">
             {drinkingGameCards.length === 0 ? (
-              <p className="admin-empty-text">No drinking game cards have been added yet.</p>
+              <p className="admin-empty-text">No party cards have been added yet.</p>
             ) : (
               drinkingGameCards.map((card) => (
                 <article
@@ -1589,10 +1589,10 @@ const AdminPage = () => {
                 >
                   <button className="admin-request-main" type="button" onClick={() => selectDrinkCard(card)}>
                     <h3>{card.text}</h3>
-                    <p>drinks · {card.event_type}</p>
+                    <p>party cards · {card.event_type}</p>
                   </button>
                   <div className="admin-product-actions">
-                    <button type="button" onClick={() => handleDrinkCardDelete(card)} aria-label="Delete drinking game card">
+                    <button type="button" onClick={() => handleDrinkCardDelete(card)} aria-label="Delete party card">
                       <Trash2 size={16} />
                     </button>
                   </div>
@@ -1618,7 +1618,7 @@ const AdminPage = () => {
             <input
               value={spinnerPairForm.title}
               onChange={(event) => updateSpinnerPairForm("title", event.target.value)}
-              placeholder="e.g., Drink or Safe"
+              placeholder="e.g., Forfeit or Free Pass"
             />
           </label>
 
@@ -1628,7 +1628,7 @@ const AdminPage = () => {
               <input
                 value={spinnerPairForm.left}
                 onChange={(event) => updateSpinnerPairForm("left", event.target.value)}
-                placeholder="Drink"
+                placeholder="Forfeit"
               />
             </label>
             <label>
@@ -1647,7 +1647,7 @@ const AdminPage = () => {
               <input
                 value={spinnerPairForm.left_detail}
                 onChange={(event) => updateSpinnerPairForm("left_detail", event.target.value)}
-                placeholder="Take two sips."
+                placeholder="Do a light party forfeit."
               />
             </label>
             <label>

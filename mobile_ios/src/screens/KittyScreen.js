@@ -239,7 +239,7 @@ const KittyScreen = () => {
         }
       >
         <Text style={styles.title}>Group Kitty</Text>
-        <Text style={styles.subtitle}>Pool money for drinks, activities & more</Text>
+        <Text style={styles.subtitle}>Pool money for activities, taxis, surprises & more</Text>
 
         {isOwner && !isPreview && (
           <Card style={styles.connectCard}>
@@ -370,7 +370,7 @@ const KittyScreen = () => {
                   />
                   <TextInput
                     label="Message (Optional)"
-                    placeholder="For the drinks!"
+                    placeholder="For the weekend!"
                     value={message}
                     onChangeText={setMessage}
                     returnKeyType="done"

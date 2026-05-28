@@ -41,10 +41,10 @@ const dareDecks = {
     'Speak only in dramatic movie-trailer voice until your next turn.',
   ],
   drinks: [
-    'Most likely to miss the taxi takes two sips.',
+    'Most likely to miss the taxi gets the next silly selfie pose.',
     'Never have I ever: forgotten someone’s name during a night out.',
-    'Everyone who has known the guest of honour for more than five years takes a sip.',
-    'Choose a Rule Master. Anyone who breaks their rule takes a sip.',
+    'Everyone who has known the guest of honour for more than five years tells a quick memory.',
+    'Choose a Rule Master. Anyone who breaks their rule takes a light forfeit.',
   ],
 };
 
@@ -52,7 +52,7 @@ const categories = [
   { id: 'warmup', title: 'Warm Up', icon: 'sparkles' },
   { id: 'photo', title: 'Photo Dare', icon: 'camera' },
   { id: 'cheeky', title: 'Cheeky', icon: 'happy' },
-  { id: 'drinks', title: 'Drinks', icon: 'beer' },
+  { id: 'drinks', title: 'Party Cards', icon: 'albums' },
 ];
 
 const gameModes = [
@@ -79,9 +79,9 @@ const gameModes = [
   },
   {
     id: 'drinks',
-    title: 'Drinking Games',
-    subtitle: 'Optional rounds and rules',
-    icon: 'beer',
+    title: 'Party Cards',
+    subtitle: 'Optional prompts and rules',
+    icon: 'albums',
     category: 'drinks',
   },
   {
@@ -178,17 +178,17 @@ const brideQuizQuestions = [
   'How long has the bride dated the groom?',
   'How many children does she want?',
   'Is she a cat or dog person?',
-  'Red wine or white wine?',
+  'Tea or coffee?',
   'Lipstick or lip gloss?',
 ];
 
 const spinnerPairs = [
   {
     id: 'drink-safe',
-    title: 'Drink or Safe',
-    left: 'Drink',
-    right: 'Safe',
-    leftDetail: 'Take two sips or nominate someone to save you.',
+    title: 'Forfeit or Free Pass',
+    left: 'Forfeit',
+    right: 'Free Pass',
+    leftDetail: 'Do a light party forfeit or nominate someone to help.',
     rightDetail: 'You are safe this round.',
     leftColor: '#00B7FF',
     rightColor: '#22C55E',
@@ -224,6 +224,10 @@ const spinnerPairs = [
     rightColor: '#0D9488',
   },
 ];
+
+const alcoholWordPattern = /\b(drink|drinks|drinking|sip|sips|shot|shots|beer|wine|cocktail|alcohol|vodka|tequila|whisky|gin|rum)\b/i;
+
+const isReviewSafeGameText = (value = '') => !alcoholWordPattern.test(value);
 
 const DaresScreen = ({ navigation }) => {
   const { session, isOwner } = useApp();
@@ -388,17 +392,19 @@ const DaresScreen = ({ navigation }) => {
 
   const availableSpinnerPairs = [
     ...spinnerPairs,
-    ...customSpinnerPairs.map((pair) => ({
-      id: pair.id,
-      title: pair.title,
-      left: pair.left,
-      right: pair.right,
-      leftDetail: pair.left_detail || '',
-      rightDetail: pair.right_detail || '',
-      leftColor: pair.left_color || theme.accent,
-      rightColor: pair.right_color || colors.success,
-      source: pair.event_id ? 'owner' : 'admin',
-    })),
+    ...customSpinnerPairs
+      .filter((pair) => isReviewSafeGameText(`${pair.title} ${pair.left} ${pair.right} ${pair.left_detail || ''} ${pair.right_detail || ''}`))
+      .map((pair) => ({
+        id: pair.id,
+        title: pair.title,
+        left: pair.left,
+        right: pair.right,
+        leftDetail: pair.left_detail || '',
+        rightDetail: pair.right_detail || '',
+        leftColor: pair.left_color || theme.accent,
+        rightColor: pair.right_color || colors.success,
+        source: pair.event_id ? 'owner' : 'admin',
+      })),
   ];
   const selectedPair = availableSpinnerPairs.find((pair) => pair.id === selectedPairId) || availableSpinnerPairs[0];
   const visibleGameModes = session?.event_type === 'hen' ? [...gameModes, ...henGameModes] : gameModes;
@@ -486,7 +492,7 @@ const DaresScreen = ({ navigation }) => {
         source: 'built-in',
       })),
       ...customDares
-        .filter((dare) => dare.category === categoryId)
+        .filter((dare) => dare.category === categoryId && (categoryId !== 'drinks' || isReviewSafeGameText(dare.text)))
         .map((dare) => ({ ...dare, source: dare.event_id ? 'owner' : 'admin' })),
     ];
     const nextDare = deck[Math.floor(Math.random() * deck.length)];
@@ -1556,7 +1562,7 @@ const DaresScreen = ({ navigation }) => {
               {selectedGameMode === 'photo'
                 ? 'Photo Challenge'
                 : selectedGameMode === 'drinks'
-                ? 'Drinking Game'
+                ? 'Party Card'
                 : categories.find((category) => category.id === selectedCategory)?.title}
             </Text>
             <Text style={styles.dareText}>{currentDare.text}</Text>
@@ -1627,7 +1633,7 @@ const DaresScreen = ({ navigation }) => {
 
         {selectedCategory === 'drinks' && (
           <Text style={styles.drinkNote}>
-            Keep drinking games optional and sensible. Water rounds count.
+            Party cards are optional. Keep every round safe and comfortable.
           </Text>
         )}
           </>
@@ -1708,14 +1714,14 @@ const DaresScreen = ({ navigation }) => {
             <Text style={styles.ownerSectionTitle}>Owner Spinner Choices</Text>
             <TextInput
               label="Spinner Title"
-              placeholder="e.g., Drink or Dare"
+              placeholder="e.g., Forfeit or Free Pass"
               value={newPairTitle}
               onChangeText={setNewPairTitle}
             />
             <View style={styles.pairInputRow}>
               <TextInput
                 label="Choice One"
-                placeholder="Drink"
+                placeholder="Forfeit"
                 value={newPairLeft}
                 onChangeText={setNewPairLeft}
                 style={styles.pairInput}
@@ -1730,7 +1736,7 @@ const DaresScreen = ({ navigation }) => {
             </View>
             <TextInput
               label="Choice One Detail"
-              placeholder="e.g., Take two sips"
+              placeholder="e.g., Do a light party forfeit"
               value={newPairLeftDetail}
               onChangeText={setNewPairLeftDetail}
             />

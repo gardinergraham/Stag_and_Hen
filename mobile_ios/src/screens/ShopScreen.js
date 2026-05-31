@@ -181,8 +181,8 @@ const ShopScreen = () => {
         <Text style={styles.title}>Party Shop</Text>
         <Text style={styles.subtitle}>
           {session?.event_type === 'stag'
-            ? 'Gear, games and weekend essentials for the lads.'
-            : 'Handbags, glam, games and party extras for the girls.'}
+            ? 'Gear, outfits and weekend essentials for the lads.'
+            : 'Handbags, glam, keepsakes and party extras for the girls.'}
         </Text>
         <Text style={styles.affiliateDisclosure}>
           As an Amazon Associate, Stag & Hen may earn from qualifying purchases.

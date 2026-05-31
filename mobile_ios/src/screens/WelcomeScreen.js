@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Image, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, Image, SafeAreaView, ScrollView } from 'react-native';
 import { colors, typography, spacing } from '../theme';
 import { Button } from '../components';
 import { useApp } from '../context/AppContext';
@@ -23,59 +23,61 @@ const WelcomeScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Image
-          source={require('../../assets/logo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <Text style={styles.title}>Welcome to</Text>
-        <Text style={styles.brandTitle}>The Stag & Hen</Text>
-        <Text style={styles.tagline}>Last Stop Before The Altar</Text>
-        
-        <Text style={styles.description}>
-          Plan the perfect send-off! Share memories, manage your crew, play party games,
-          award prize points, and collect video messages for the bride or groom.
-        </Text>
-      </View>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.content}>
+          <Image
+            source={require('../../assets/logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          <Text style={styles.title}>Welcome to</Text>
+          <Text style={styles.brandTitle}>The Stag & Hen</Text>
+          <Text style={styles.tagline}>Last Stop Before The Altar</Text>
+          
+          <Text style={styles.description}>
+            Plan the perfect send-off. Share memories, manage your crew, award prize points,
+            and collect video messages for the bride or groom.
+          </Text>
+        </View>
 
-      <View style={styles.buttons}>
-        <Button
-          title="Create an Event"
-          variant="gold"
-          size="large"
-          onPress={() => navigation.navigate('CreateEvent')}
-          style={styles.button}
-        />
-        <Button
-          title="Preview Games & Features"
-          variant="primary"
-          size="large"
-          onPress={handlePreview}
-          style={styles.button}
-        />
-        <Button
-          title="Join via QR Code"
-          variant="outline"
-          size="large"
-          onPress={() => navigation.navigate('ScanQR')}
-          style={styles.button}
-        />
-        <Button
-          title="Join Manually"
-          variant="outline"
-          size="large"
-          onPress={() => navigation.navigate('JoinManual')}
-          style={styles.button}
-        />
-        <Button
-          title="Owner Login"
-          variant="secondary"
-          size="medium"
-          onPress={() => navigation.navigate('OwnerLogin')}
-          style={styles.ownerButton}
-        />
-      </View>
+        <View style={styles.buttons}>
+          <Button
+            title="Create an Event"
+            variant="gold"
+            size="large"
+            onPress={() => navigation.navigate('CreateEvent')}
+            style={styles.button}
+          />
+          <Button
+            title="Preview Features"
+            variant="primary"
+            size="large"
+            onPress={handlePreview}
+            style={styles.button}
+          />
+          <Button
+            title="Join via QR Code"
+            variant="outline"
+            size="large"
+            onPress={() => navigation.navigate('ScanQR')}
+            style={styles.button}
+          />
+          <Button
+            title="Join Manually"
+            variant="outline"
+            size="large"
+            onPress={() => navigation.navigate('JoinManual')}
+            style={styles.button}
+          />
+          <Button
+            title="Owner Login"
+            variant="secondary"
+            size="medium"
+            onPress={() => navigation.navigate('OwnerLogin')}
+            style={styles.ownerButton}
+          />
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -85,17 +87,24 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: spacing.lg,
+  },
   content: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
   },
   logo: {
-    width: 120,
-    height: 120,
+    width: 104,
+    height: 104,
     borderRadius: 24,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   title: {
     ...typography.body,
@@ -123,6 +132,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xl,
     gap: spacing.md,
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
   },
   button: {
     width: '100%',

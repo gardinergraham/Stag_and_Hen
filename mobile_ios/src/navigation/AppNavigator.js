@@ -28,7 +28,14 @@ const Tab = createBottomTabNavigator();
 const TabIcon = ({ icon, label, focused, activeColor = colors.primary }) => (
   <View style={styles.tabIcon}>
     <Text style={[styles.tabEmoji, focused && styles.tabEmojiActive]}>{icon}</Text>
-    <Text style={[styles.tabLabel, focused && { color: activeColor }]}>{label}</Text>
+    <Text
+      style={[styles.tabLabel, focused && { color: activeColor }]}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.7}
+    >
+      {label}
+    </Text>
   </View>
 );
 
@@ -68,7 +75,7 @@ const MainTabs = () => {
         component={DaresScreen}
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon icon="🎯" label="Dares" focused={focused} activeColor={theme.accent} />
+            <TabIcon icon="🎯" label="Activities" focused={focused} activeColor={theme.accent} />
           ),
         }}
       />
@@ -170,17 +177,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopColor: colors.border,
     borderTopWidth: 1,
-    height: 80,
-    paddingBottom: 20,
-    paddingTop: 10,
+    height: 88,
+    paddingBottom: 24,
+    paddingTop: 8,
   },
   tabIcon: {
     alignItems: 'center',
     justifyContent: 'center',
+    width: 72,
   },
   tabEmoji: {
-    fontSize: 24,
-    marginBottom: 4,
+    fontSize: 22,
+    marginBottom: 2,
     opacity: 0.6,
   },
   tabEmojiActive: {
@@ -189,7 +197,8 @@ const styles = StyleSheet.create({
   tabLabel: {
     ...typography.caption,
     color: colors.textMuted,
-    fontSize: 10,
+    fontSize: 9,
+    textAlign: 'center',
   },
 });
 

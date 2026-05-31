@@ -18,7 +18,7 @@ import { useEventIAPPurchase } from '../hooks/useEventIAPPurchase';
 
 const CreateEventScreen = ({ navigation }) => {
   const { login } = useApp();
-  const { purchaseEventPackage, purchaseLoading, restoreEventPurchases } = useEventIAPPurchase();
+  const { purchaseEventPackage, purchaseLoading } = useEventIAPPurchase();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     event_name: '',
@@ -264,18 +264,6 @@ const CreateEventScreen = ({ navigation }) => {
     }
   };
 
-  const handleRestorePurchases = async () => {
-    try {
-      await restoreEventPurchases();
-      Alert.alert(
-        'Restore Complete',
-        'Event packages are one-time purchases. If a pending purchase exists, it will be processed when you retry from this screen or the Home screen.'
-      );
-    } catch (error) {
-      Alert.alert('Restore Error', error?.message || 'Unable to restore purchases right now.');
-    }
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
@@ -413,9 +401,6 @@ const CreateEventScreen = ({ navigation }) => {
           onPress={handleCreate}
           style={styles.createButton}
         />
-        <TouchableOpacity style={styles.restoreButton} onPress={handleRestorePurchases}>
-          <Text style={styles.restoreButtonText}>Restore Purchases</Text>
-        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -571,20 +556,7 @@ const styles = StyleSheet.create({
   },
   createButton: {
     marginTop: spacing.md,
-  },
-  restoreButton: {
-    alignItems: 'center',
-    borderColor: colors.border,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginTop: spacing.md,
     marginBottom: spacing.xl,
-    paddingVertical: spacing.sm,
-  },
-  restoreButtonText: {
-    ...typography.bodySmall,
-    color: colors.textSecondary,
-    fontWeight: '600',
   },
 });
 

@@ -82,7 +82,14 @@ const Button = ({
       ) : (
         <>
           {icon}
-          <Text style={[...getTextStyle(), textStyle]}>{title}</Text>
+          <Text
+            style={[...getTextStyle(), textStyle]}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.78}
+          >
+            {title}
+          </Text>
         </>
       )}
     </TouchableOpacity>

@@ -40,19 +40,12 @@ const dareDecks = {
     'Convince a stranger or staff member to give the group a party rating out of 10.',
     'Speak only in dramatic movie-trailer voice until your next turn.',
   ],
-  drinks: [
-    'Most likely to miss the taxi gets the next silly selfie pose.',
-    'Never have I ever: forgotten someone’s name during a night out.',
-    'Everyone who has known the guest of honour for more than five years tells a quick memory.',
-    'Choose a Rule Master. Anyone who breaks their rule takes a light forfeit.',
-  ],
 };
 
 const categories = [
   { id: 'warmup', title: 'Warm Up', icon: 'sparkles' },
   { id: 'photo', title: 'Photo Dare', icon: 'camera' },
   { id: 'cheeky', title: 'Cheeky', icon: 'happy' },
-  { id: 'drinks', title: 'Party Cards', icon: 'albums' },
 ];
 
 const gameModes = [
@@ -65,7 +58,7 @@ const gameModes = [
   },
   {
     id: 'dares',
-    title: 'Dares',
+    title: 'Challenges',
     subtitle: 'Quick cards for the crew',
     icon: 'sparkles',
     category: 'warmup',
@@ -76,13 +69,6 @@ const gameModes = [
     subtitle: 'Create gallery moments',
     icon: 'camera',
     category: 'photo',
-  },
-  {
-    id: 'drinks',
-    title: 'Party Cards',
-    subtitle: 'Optional prompts and rules',
-    icon: 'albums',
-    category: 'drinks',
   },
   {
     id: 'missions',
@@ -184,7 +170,7 @@ const brideQuizQuestions = [
 
 const spinnerPairs = [
   {
-    id: 'drink-safe',
+    id: 'forfeit-pass',
     title: 'Forfeit or Free Pass',
     left: 'Forfeit',
     right: 'Free Pass',
@@ -225,10 +211,6 @@ const spinnerPairs = [
   },
 ];
 
-const alcoholWordPattern = /\b(drink|drinks|drinking|sip|sips|shot|shots|beer|wine|cocktail|alcohol|vodka|tequila|whisky|gin|rum)\b/i;
-
-const isReviewSafeGameText = (value = '') => !alcoholWordPattern.test(value);
-
 const DaresScreen = ({ navigation }) => {
   const { session, isOwner } = useApp();
   const theme = getEventTheme(session?.event_type);
@@ -250,7 +232,7 @@ const DaresScreen = ({ navigation }) => {
   const [savingPair, setSavingPair] = useState(false);
   const [members, setMembers] = useState([]);
   const [guestOfHonour, setGuestOfHonour] = useState('');
-  const [selectedPairId, setSelectedPairId] = useState('drink-safe');
+  const [selectedPairId, setSelectedPairId] = useState('forfeit-pass');
   const [spinnerResult, setSpinnerResult] = useState(null);
   const [recentSpinResults, setRecentSpinResults] = useState([]);
   const [spinResultsVisible, setSpinResultsVisible] = useState(false);
@@ -392,19 +374,17 @@ const DaresScreen = ({ navigation }) => {
 
   const availableSpinnerPairs = [
     ...spinnerPairs,
-    ...customSpinnerPairs
-      .filter((pair) => isReviewSafeGameText(`${pair.title} ${pair.left} ${pair.right} ${pair.left_detail || ''} ${pair.right_detail || ''}`))
-      .map((pair) => ({
-        id: pair.id,
-        title: pair.title,
-        left: pair.left,
-        right: pair.right,
-        leftDetail: pair.left_detail || '',
-        rightDetail: pair.right_detail || '',
-        leftColor: pair.left_color || theme.accent,
-        rightColor: pair.right_color || colors.success,
-        source: pair.event_id ? 'owner' : 'admin',
-      })),
+    ...customSpinnerPairs.map((pair) => ({
+      id: pair.id,
+      title: pair.title,
+      left: pair.left,
+      right: pair.right,
+      leftDetail: pair.left_detail || '',
+      rightDetail: pair.right_detail || '',
+      leftColor: pair.left_color || theme.accent,
+      rightColor: pair.right_color || colors.success,
+      source: pair.event_id ? 'owner' : 'admin',
+    })),
   ];
   const selectedPair = availableSpinnerPairs.find((pair) => pair.id === selectedPairId) || availableSpinnerPairs[0];
   const visibleGameModes = session?.event_type === 'hen' ? [...gameModes, ...henGameModes] : gameModes;
@@ -492,7 +472,7 @@ const DaresScreen = ({ navigation }) => {
         source: 'built-in',
       })),
       ...customDares
-        .filter((dare) => dare.category === categoryId && (categoryId !== 'drinks' || isReviewSafeGameText(dare.text)))
+        .filter((dare) => dare.category === categoryId)
         .map((dare) => ({ ...dare, source: dare.event_id ? 'owner' : 'admin' })),
     ];
     const nextDare = deck[Math.floor(Math.random() * deck.length)];
@@ -890,7 +870,7 @@ const DaresScreen = ({ navigation }) => {
           try {
             await daresApi.deleteSpinnerPair(pair.id, session?.owner_pin);
             if (selectedPairId === pair.id) {
-              setSelectedPairId('drink-safe');
+              setSelectedPairId('forfeit-pass');
               setSpinnerResult(null);
             }
             await loadCustomSpinnerPairs();
@@ -907,8 +887,8 @@ const DaresScreen = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={[styles.hero, { borderColor: theme.accent, shadowColor: theme.accent }]}>
           <View style={styles.heroText}>
-            <Text style={[styles.eyebrow, { color: theme.accent }]}>Party Games</Text>
-            <Text style={styles.title}>Dares & Challenges</Text>
+            <Text style={[styles.eyebrow, { color: theme.accent }]}>Activities</Text>
+            <Text style={styles.title}>Challenges & Memories</Text>
             <Text style={styles.subtitle}>
               Quick cards for the crew when the night needs a little spark.
             </Text>
@@ -1553,7 +1533,7 @@ const DaresScreen = ({ navigation }) => {
         </ScrollView>
         )}
 
-        {(selectedGameMode === 'dares' || selectedGameMode === 'photo' || selectedGameMode === 'drinks') && (
+        {(selectedGameMode === 'dares' || selectedGameMode === 'photo') && (
           <>
 
         <Card style={[styles.dareCard, { borderColor: `${theme.accent}66` }]}>
@@ -1561,24 +1541,22 @@ const DaresScreen = ({ navigation }) => {
             <Text style={[styles.dareLabel, { color: theme.accent }]}>
               {selectedGameMode === 'photo'
                 ? 'Photo Challenge'
-                : selectedGameMode === 'drinks'
-                ? 'Party Card'
                 : categories.find((category) => category.id === selectedCategory)?.title}
             </Text>
             <Text style={styles.dareText}>{currentDare.text}</Text>
             <Text style={[styles.dareSource, { color: theme.accent }]}>
               {currentDare.source === 'owner'
-                ? selectedGameMode === 'drinks' ? 'Owner card' : 'Owner dare'
+                ? 'Owner dare'
                 : currentDare.source === 'admin'
-                ? selectedGameMode === 'drinks' ? 'Admin card' : 'Admin dare'
-                : selectedGameMode === 'drinks' ? 'Built-in card' : 'Built-in dare'}
+                ? 'Admin dare'
+                : 'Built-in dare'}
             </Text>
             <View style={styles.dareActions}>
               <Button
-                title={selectedGameMode === 'photo' ? 'New Challenge' : selectedGameMode === 'drinks' ? 'New Round' : 'Spin Again'}
+                title={selectedGameMode === 'photo' ? 'New Challenge' : 'Spin Again'}
                 variant="outline"
                 color={theme.accent}
-                onPress={() => spinDare(selectedGameMode === 'photo' ? 'photo' : selectedGameMode === 'drinks' ? 'drinks' : selectedCategory)}
+                onPress={() => spinDare(selectedGameMode === 'photo' ? 'photo' : selectedCategory)}
                 style={styles.dareButton}
               />
               <Button
@@ -1601,7 +1579,7 @@ const DaresScreen = ({ navigation }) => {
               onPress={() => setManageVisible(true)}
             >
               <Ionicons name="add-circle" size={20} color={theme.accent} />
-              <Text style={[styles.photoProofText, { color: theme.accent }]}>Manage Owner Games</Text>
+              <Text style={[styles.photoProofText, { color: theme.accent }]}>Manage Owner Activities</Text>
             </TouchableOpacity>
           )}
           {selectedGameMode !== 'spinner' && selectedGameMode !== 'missions' && selectedGameMode !== 'messages' && selectedGameMode !== 'purse' && selectedGameMode !== 'brideQuiz' && (
@@ -1630,12 +1608,6 @@ const DaresScreen = ({ navigation }) => {
             </View>
           ))
         )}
-
-        {selectedCategory === 'drinks' && (
-          <Text style={styles.drinkNote}>
-            Party cards are optional. Keep every round safe and comfortable.
-          </Text>
-        )}
           </>
         )}
       </ScrollView>
@@ -1647,7 +1619,7 @@ const DaresScreen = ({ navigation }) => {
         >
           <View style={styles.modalPanel}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Owner Games</Text>
+              <Text style={styles.modalTitle}>Owner Activities</Text>
               <TouchableOpacity onPress={() => setManageVisible(false)}>
                 <Ionicons name="close" size={26} color={colors.text} />
               </TouchableOpacity>
@@ -2385,12 +2357,6 @@ const styles = StyleSheet.create({
     ...typography.bodySmall,
     color: colors.textSecondary,
     flex: 1,
-  },
-  drinkNote: {
-    ...typography.caption,
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginTop: spacing.lg,
   },
   modalOverlay: {
     flex: 1,

@@ -493,21 +493,52 @@ const PrivacyPage = () => (
 const PaymentStatusPage = ({ status }) => {
   const success = status === "success";
   const query = typeof window !== "undefined" ? window.location.search : "";
+  const params = new URLSearchParams(query);
+  const paymentType = params.get("type");
+  const isKittyPayment = paymentType === "kitty";
   const appUrl = `stagandhen://payment-${status}${query}`;
   const androidIntentUrl = `intent://payment-${status}${query}#Intent;scheme=stagandhen;package=com.stagandhen.app;end`;
+
+  const openApp = useCallback(() => {
+    const isAndroid = /Android/i.test(window.navigator.userAgent);
+
+    if (isAndroid) {
+      window.location.assign(androidIntentUrl);
+      return;
+    }
+
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    iframe.src = appUrl;
+    document.body.appendChild(iframe);
+
+    window.setTimeout(() => {
+      iframe.remove();
+      window.location.href = appUrl;
+    }, 500);
+  }, [androidIntentUrl, appUrl]);
 
   useEffect(() => {
     if (!success) {
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      const isAndroid = /Android/i.test(window.navigator.userAgent);
-      window.location.href = isAndroid ? androidIntentUrl : appUrl;
-    }, 700);
+    const timers = [300, 1400, 2800].map((delay) => window.setTimeout(openApp, delay));
 
-    return () => window.clearTimeout(timer);
-  }, [androidIntentUrl, appUrl, success]);
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [openApp, success]);
+
+  const title = success
+    ? isKittyPayment
+      ? "Kitty Payment Complete"
+      : "Your Event Is Paid"
+    : "Checkout Was Cancelled";
+
+  const message = success
+    ? isKittyPayment
+      ? "Stripe has confirmed the kitty contribution. If the app is installed, this page will try to take you back automatically."
+      : "Stripe has confirmed the payment. If the app is installed, this page will try to take you back automatically."
+    : "No payment was taken. You can return to the Stag & Hen app and try again.";
 
   return (
     <div className="App">
@@ -516,16 +547,12 @@ const PaymentStatusPage = ({ status }) => {
         <section className="legal-hero payment-status-hero">
           <div className="container">
             <p className="legal-eyebrow">{success ? "Payment Complete" : "Payment Cancelled"}</p>
-            <h1>{success ? "Your Event Is Paid" : "Checkout Was Cancelled"}</h1>
-            <p>
-              {success
-                ? "Stripe has confirmed the payment. If the app is installed, this page will try to take you back automatically."
-                : "No payment was taken. You can return to the Stag & Hen app and try again from the event owner screen."}
-            </p>
+            <h1>{title}</h1>
+            <p>{message}</p>
             <div className="hero-buttons payment-status-actions">
               {success ? (
                 <>
-                  <a href={androidIntentUrl} className="btn btn-primary">Open Stag & Hen App</a>
+                  <button type="button" className="btn btn-primary" onClick={openApp}>Open Stag & Hen App</button>
                   <a href={appUrl} className="btn btn-secondary">Try App Link</a>
                 </>
               ) : (
@@ -537,7 +564,7 @@ const PaymentStatusPage = ({ status }) => {
             </div>
             {success && (
               <p className="payment-status-note">
-                If nothing happens, open The Stag & Hen app manually and tap Check Payment & Open Event.
+                If nothing happens, tap the button above or open The Stag & Hen app manually.
               </p>
             )}
           </div>

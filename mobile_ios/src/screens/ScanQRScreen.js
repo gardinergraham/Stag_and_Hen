@@ -115,7 +115,7 @@ const ScanQRScreen = ({ navigation }) => {
             We need camera access to scan the QR code shared with you.
           </Text>
           <Button
-            title="Grant Permission"
+            title="Continue"
             variant="primary"
             onPress={requestPermission}
             style={styles.permissionButton}

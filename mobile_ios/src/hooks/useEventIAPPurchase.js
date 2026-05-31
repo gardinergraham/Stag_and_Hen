@@ -35,7 +35,6 @@ export const useEventIAPPurchase = () => {
     finishTransaction,
     products,
     requestPurchase,
-    restorePurchases,
   } = useIAP({
     onPurchaseSuccess: async (purchase) => {
       const pending = pendingPurchaseRef.current;
@@ -161,20 +160,9 @@ export const useEventIAPPurchase = () => {
     [connected, fetchProducts, requestPurchase, waitForProduct]
   );
 
-  const restoreEventPurchases = useCallback(async () => {
-    if (Platform.OS !== 'ios') {
-      throw new Error('Restore purchases is only available on iOS.');
-    }
-    if (!connected) {
-      throw new Error('Apple purchases are still connecting. Please try again in a moment.');
-    }
-    await restorePurchases();
-  }, [connected, restorePurchases]);
-
   return {
     connected,
     purchaseEventPackage,
     purchaseLoading,
-    restoreEventPurchases,
   };
 };

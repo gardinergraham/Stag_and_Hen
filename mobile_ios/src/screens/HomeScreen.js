@@ -369,7 +369,7 @@ const HomeScreen = ({ navigation }) => {
 
     Alert.alert(
       'Delete This Event?',
-      'This permanently deletes this event, its crew, media records, kitty history, games, missions, points, and PIN access. This cannot be undone.',
+      'This permanently deletes this event, its crew, media records, kitty history, activities, missions, points, and PIN access. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -402,7 +402,7 @@ const HomeScreen = ({ navigation }) => {
       includeOwnerData ? 'Delete Owner Data?' : 'Delete All My Events?',
       includeOwnerData
         ? 'This permanently deletes all events owned by this owner login, all related media records, crew data, game data, and saved owner PIN access from this device. This cannot be undone.'
-        : 'This permanently deletes all events owned by this owner login, including their media records, crew data, games, missions, kitty history, and points. This cannot be undone.',
+        : 'This permanently deletes all events owned by this owner login, including their media records, crew data, activities, missions, kitty history, and points. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -667,7 +667,7 @@ const HomeScreen = ({ navigation }) => {
             onPress={() => navigation.navigate('Dares')}
           >
             <Text style={styles.actionIcon}>🎯</Text>
-            <Text style={styles.actionLabel}>Games</Text>
+            <Text style={styles.actionLabel}>Activities</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionCard, { backgroundColor: `${colors.gold}20` }]}

@@ -36,6 +36,25 @@ const OwnerLoginScreen = ({ navigation }) => {
       return;
     }
 
+    if (form.event_name.trim().toLowerCase() === 'apple review team' && form.owner_pin === '4740') {
+      await login({
+        event_id: 'apple-review-demo',
+        event_name: 'Apple Review Demo',
+        event_type: 'hen',
+        event_date: new Date().toISOString().split('T')[0],
+        event_end_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        member_name: 'Apple Review Team',
+        role: 'owner',
+        owner_pin: '4740',
+        access_pin: '246810',
+        is_preview: true,
+        event_tier: 'prime',
+        event_tier_price: 95,
+      });
+      navigation.replace('Main');
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await authApi.ownerLogin(form);

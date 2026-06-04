@@ -39,6 +39,10 @@ class AccessResponse(BaseModel):
     owner_pin: Optional[str] = None
     access_pin: Optional[str] = None
     payment_status: Optional[str] = None
+    event_tier: Optional[str] = None
+    event_tier_price: Optional[float] = None
+    media_delete_policy: Optional[str] = None
+    upload_extension_hours: Optional[int] = None
 
 
 def require_paid_event(event: dict):
@@ -93,7 +97,11 @@ async def access_via_qr(request: QRAccessRequest):
         member_name=request.name,
         role=role,
         message=f"Welcome to {event['event_name']}!",
-        payment_status=event.get('payment_status')
+        payment_status=event.get('payment_status'),
+        event_tier=event.get('event_tier'),
+        event_tier_price=event.get('event_tier_price'),
+        media_delete_policy=event.get('media_delete_policy'),
+        upload_extension_hours=event.get('upload_extension_hours', 0),
     )
 
 
@@ -141,7 +149,11 @@ async def access_via_manual(request: MemberAccess):
         member_name=request.name,
         role=role,
         message=f"Welcome to {event['event_name']}!",
-        payment_status=event.get('payment_status')
+        payment_status=event.get('payment_status'),
+        event_tier=event.get('event_tier'),
+        event_tier_price=event.get('event_tier_price'),
+        media_delete_policy=event.get('media_delete_policy'),
+        upload_extension_hours=event.get('upload_extension_hours', 0),
     )
 
 
@@ -170,5 +182,9 @@ async def owner_login(request: OwnerLoginRequest):
         message=f"Welcome back, {event['owner_name']}!",
         owner_pin=event['owner_pin'],
         access_pin=event['access_pin'],
-        payment_status=event.get('payment_status')
+        payment_status=event.get('payment_status'),
+        event_tier=event.get('event_tier'),
+        event_tier_price=event.get('event_tier_price'),
+        media_delete_policy=event.get('media_delete_policy'),
+        upload_extension_hours=event.get('upload_extension_hours', 0),
     )

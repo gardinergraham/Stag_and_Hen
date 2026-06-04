@@ -15,6 +15,9 @@ import { Button, TextInput } from '../components';
 import { authApi } from '../services/api';
 import { useApp } from '../context/AppContext';
 
+const APPLE_REVIEW_EVENT_NAME = 'apple review team';
+const APPLE_REVIEW_CREW_PINS = new Set(['3664', '4740', '4640']);
+
 const JoinManualScreen = ({ navigation }) => {
   const { login } = useApp();
   const [loading, setLoading] = useState(false);
@@ -32,6 +35,27 @@ const JoinManualScreen = ({ navigation }) => {
   };
 
   const handleJoin = async () => {
+    if (
+      form.event_name.trim().toLowerCase() === APPLE_REVIEW_EVENT_NAME &&
+      APPLE_REVIEW_CREW_PINS.has(form.pin)
+    ) {
+      await login({
+        event_id: 'apple-review-demo',
+        event_name: 'Apple Review Demo',
+        event_type: 'hen',
+        event_date: new Date().toISOString().split('T')[0],
+        event_end_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        member_name: form.name.trim() || 'Apple Reviewer',
+        role: 'crew',
+        access_pin: '3664',
+        is_preview: true,
+        event_tier: 'prime',
+        event_tier_price: 95,
+      });
+      navigation.replace('Main');
+      return;
+    }
+
     if (!form.event_name || !form.name || !form.pin) {
       Alert.alert('Missing Info', 'Please fill in all fields.');
       return;
@@ -50,6 +74,12 @@ const JoinManualScreen = ({ navigation }) => {
         event_end_date: data.event_end_date,
         member_name: data.member_name,
         role: data.role,
+        access_pin: form.pin,
+        payment_status: data.payment_status || 'paid',
+        event_tier: data.event_tier,
+        event_tier_price: data.event_tier_price,
+        media_delete_policy: data.media_delete_policy,
+        upload_extension_hours: data.upload_extension_hours || 0,
       });
 
       Alert.alert(

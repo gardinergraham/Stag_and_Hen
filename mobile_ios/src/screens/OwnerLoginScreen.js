@@ -15,6 +15,9 @@ import { Button, TextInput } from '../components';
 import { authApi } from '../services/api';
 import { useApp } from '../context/AppContext';
 
+const APPLE_REVIEW_EVENT_NAME = 'apple review team';
+const APPLE_REVIEW_OWNER_PINS = new Set(['4740', '4640', '3664']);
+
 const OwnerLoginScreen = ({ navigation }) => {
   const { login } = useApp();
   const [loading, setLoading] = useState(false);
@@ -36,7 +39,10 @@ const OwnerLoginScreen = ({ navigation }) => {
       return;
     }
 
-    if (form.event_name.trim().toLowerCase() === 'apple review team' && form.owner_pin === '4740') {
+    if (
+      form.event_name.trim().toLowerCase() === APPLE_REVIEW_EVENT_NAME &&
+      APPLE_REVIEW_OWNER_PINS.has(form.owner_pin)
+    ) {
       await login({
         event_id: 'apple-review-demo',
         event_name: 'Apple Review Demo',
@@ -70,6 +76,11 @@ const OwnerLoginScreen = ({ navigation }) => {
         role: 'owner',
         owner_pin: data.owner_pin || form.owner_pin,
         access_pin: data.access_pin,
+        payment_status: data.payment_status || 'paid',
+        event_tier: data.event_tier,
+        event_tier_price: data.event_tier_price,
+        media_delete_policy: data.media_delete_policy,
+        upload_extension_hours: data.upload_extension_hours || 0,
       });
 
       Alert.alert(

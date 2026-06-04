@@ -204,6 +204,56 @@ const HomeScreen = ({ navigation }) => {
     .slice(EVENT_PLAN_ORDER.indexOf(currentTier) + 1)
     .filter((tier) => EVENT_PLAN_INFO[tier]);
 
+  const startTierUpgrade = async (targetTier) => {
+    if (!session?.event_id || !session?.owner_pin || !EVENT_PLAN_INFO[targetTier]) return;
+
+    const productId = getEventUpgradeProductId(currentTier, targetTier);
+    if (!productId) {
+      Alert.alert('Upgrade Unavailable', 'This Apple upgrade product has not been configured yet.');
+      return;
+    }
+
+    setUpgradingTier(targetTier);
+    try {
+      await purchaseEventPackage({
+        eventId: session.event_id,
+        ownerPin: session.owner_pin,
+        tier: currentTier,
+        targetTier,
+        productId,
+      });
+      await loadData();
+      Alert.alert('Upgrade Complete', 'Your event package has been updated.');
+    } catch (error) {
+      const detail = error?.response?.data?.detail || error?.message || 'Could not complete Apple upgrade.';
+      Alert.alert('Upgrade Error', detail);
+    } finally {
+      setUpgradingTier(null);
+    }
+  };
+
+  const startUploadExtension = async () => {
+    if (!session?.event_id || !session?.owner_pin) return;
+
+    setExtendingUploads(true);
+    try {
+      await purchaseEventPackage({
+        eventId: session.event_id,
+        ownerPin: session.owner_pin,
+        tier: currentTier,
+        productId: IOS_UPLOAD_EXTENSION_PRODUCT_ID,
+        purchaseType: 'upload_extension',
+      });
+      await loadData();
+      Alert.alert('Upload Window Extended', 'Crew uploads are open for another 24 hours.');
+    } catch (error) {
+      const detail = error?.response?.data?.detail || error?.message || 'Could not complete Apple upload extension.';
+      Alert.alert('Extension Error', detail);
+    } finally {
+      setExtendingUploads(false);
+    }
+  };
+
   useEffect(() => {
     if (!paymentRequired) return;
     Alert.alert(
@@ -297,54 +347,6 @@ const HomeScreen = ({ navigation }) => {
       Alert.alert('Payment Error', detail);
     } finally {
       setStartingCheckout(false);
-    }
-  };
-
-  const startTierUpgrade = async (targetTier) => {
-    if (!session?.event_id || !session?.owner_pin || !EVENT_PLAN_INFO[targetTier]) return;
-    const productId = getEventUpgradeProductId(currentTier, targetTier);
-    if (!productId) {
-      Alert.alert('Upgrade Unavailable', 'This Apple upgrade product has not been configured yet.');
-      return;
-    }
-
-    setUpgradingTier(targetTier);
-    try {
-      await purchaseEventPackage({
-        eventId: session.event_id,
-        ownerPin: session.owner_pin,
-        tier: currentTier,
-        targetTier,
-        productId,
-      });
-      await loadData();
-      Alert.alert('Upgrade Complete', 'Your event package has been updated.');
-    } catch (error) {
-      const detail = error?.response?.data?.detail || error?.message || 'Could not complete Apple upgrade.';
-      Alert.alert('Upgrade Error', detail);
-    } finally {
-      setUpgradingTier(null);
-    }
-  };
-
-  const startUploadExtension = async () => {
-    if (!session?.event_id || !session?.owner_pin) return;
-    setExtendingUploads(true);
-    try {
-      await purchaseEventPackage({
-        eventId: session.event_id,
-        ownerPin: session.owner_pin,
-        tier: currentTier,
-        productId: IOS_UPLOAD_EXTENSION_PRODUCT_ID,
-        purchaseType: 'upload_extension',
-      });
-      await loadData();
-      Alert.alert('Upload Window Extended', 'Crew uploads are open for another 24 hours.');
-    } catch (error) {
-      const detail = error?.response?.data?.detail || error?.message || 'Could not complete Apple upload extension.';
-      Alert.alert('Extension Error', detail);
-    } finally {
-      setExtendingUploads(false);
     }
   };
 
@@ -593,7 +595,7 @@ const HomeScreen = ({ navigation }) => {
                     color={theme.accent}
                     size="small"
                     loading={extendingUploads}
-                    disabled={!!upgradingTier}
+                    disabled={purchaseLoading || !!upgradingTier}
                     onPress={startUploadExtension}
                   />
                 </View>

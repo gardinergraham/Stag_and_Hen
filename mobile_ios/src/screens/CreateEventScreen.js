@@ -28,9 +28,9 @@ const CreateEventScreen = ({ navigation }) => {
     event_date: null,
     event_end_date: null,
     description: '',
-    event_tier: 'prime',
-    event_tier_price: 95,
-    media_delete_policy: 'never',
+    event_tier: 'one_day',
+    event_tier_price: 25,
+    media_delete_policy: '1_day',
   });
   const [picker, setPicker] = useState(null);
   const STAG_BLUE = '#00B7FF';
@@ -47,7 +47,7 @@ const CreateEventScreen = ({ navigation }) => {
       name: 'One Day',
       price: 25,
       media_delete_policy: '1_day',
-      detail: 'Media is removed from the gallery 24 hours after the event ends. You can upgrade later.',
+      detail: 'Media is available until 24 hours after the event ends. You can upgrade later if the celebration runs longer.',
     },
     {
       id: 'extended',

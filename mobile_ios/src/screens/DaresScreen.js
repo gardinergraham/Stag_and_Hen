@@ -42,6 +42,63 @@ const dareDecks = {
   ],
 };
 
+const partyCardDeck = [
+  {
+    title: 'Story Time',
+    prompt: 'Tell the group the funniest memory you have with the guest of honour.',
+    points: 10,
+    tone: 'Memory',
+  },
+  {
+    title: 'Photo Proof',
+    prompt: 'Take a group selfie with everyone doing the same dramatic pose.',
+    points: 15,
+    tone: 'Photo',
+  },
+  {
+    title: 'Compliment Chain',
+    prompt: 'Start a compliment chain. Everyone says one kind thing about the person on their left.',
+    points: 10,
+    tone: 'Crew',
+  },
+  {
+    title: 'Mini Toast',
+    prompt: 'Give a 20-second toast to the bride or groom. Keep it funny, sweet, or both.',
+    points: 15,
+    tone: 'Toast',
+  },
+  {
+    title: 'Find the Colour',
+    prompt: 'Find something that matches the party colour and get a photo for the gallery.',
+    points: 10,
+    tone: 'Scavenger',
+  },
+  {
+    title: 'Mystery Judge',
+    prompt: 'The organiser picks the best pose, best laugh, or best effort this round.',
+    points: 20,
+    tone: 'Prize',
+  },
+  {
+    title: 'Switch Roles',
+    prompt: 'Someone becomes the official photographer for the next five minutes.',
+    points: 10,
+    tone: 'Gallery',
+  },
+  {
+    title: 'Crowd Vote',
+    prompt: 'The crew votes for the person most likely to become the weekend legend.',
+    points: 15,
+    tone: 'Vote',
+  },
+  {
+    title: 'Wild Card',
+    prompt: 'Create a harmless challenge for the group. The guest of honour has final veto.',
+    points: 20,
+    tone: 'Choice',
+  },
+];
+
 const categories = [
   { id: 'warmup', title: 'Warm Up', icon: 'sparkles' },
   { id: 'photo', title: 'Photo Dare', icon: 'camera' },
@@ -62,6 +119,13 @@ const gameModes = [
     subtitle: 'Quick cards for the crew',
     icon: 'sparkles',
     category: 'warmup',
+  },
+  {
+    id: 'partyCards',
+    title: 'Party Cards',
+    subtitle: 'Draw a table challenge',
+    icon: 'albums',
+    category: null,
   },
   {
     id: 'photo',
@@ -218,6 +282,7 @@ const DaresScreen = ({ navigation }) => {
   const [selectedCategory, setSelectedCategory] = useState('warmup');
   const [customDares, setCustomDares] = useState([]);
   const [customSpinnerPairs, setCustomSpinnerPairs] = useState([]);
+  const [currentPartyCard, setCurrentPartyCard] = useState(partyCardDeck[0]);
   const [currentDare, setCurrentDare] = useState({ text: dareDecks.warmup[0], category: 'warmup', source: 'built-in' });
   const [completed, setCompleted] = useState([]);
   const [manageVisible, setManageVisible] = useState(false);
@@ -478,6 +543,21 @@ const DaresScreen = ({ navigation }) => {
     const nextDare = deck[Math.floor(Math.random() * deck.length)];
     setSelectedCategory(categoryId);
     setCurrentDare(nextDare);
+  };
+
+  const drawPartyCard = () => {
+    const availableCards = partyCardDeck.filter((card) => card.title !== currentPartyCard?.title);
+    const deck = availableCards.length ? availableCards : partyCardDeck;
+    const nextCard = deck[Math.floor(Math.random() * deck.length)];
+    setCurrentPartyCard(nextCard);
+  };
+
+  const completePartyCard = () => {
+    setCompleted((current) => [
+      `${currentPartyCard.title}: ${currentPartyCard.prompt}`,
+      ...current.filter((card) => !card.startsWith(`${currentPartyCard.title}:`)),
+    ].slice(0, 5));
+    Alert.alert('Card Complete', 'Nice. Add proof to the gallery if it deserves a permanent place.');
   };
 
   const selectGameMode = (mode) => {
@@ -1315,6 +1395,85 @@ const DaresScreen = ({ navigation }) => {
           </Card>
         )}
 
+        {selectedGameMode === 'partyCards' && (
+          <>
+            <Card style={[styles.partyCard, { borderColor: `${theme.accent}88` }]}>
+              <Card.Content style={styles.partyCardContent}>
+                <View style={styles.partyCardHeader}>
+                  <View>
+                    <Text style={[styles.dareLabel, { color: theme.accent }]}>Party Card</Text>
+                    <Text style={styles.partyCardTitle}>{currentPartyCard.title}</Text>
+                  </View>
+                  <View style={[styles.partyCardBadge, { borderColor: theme.accent }]}>
+                    <Text style={[styles.partyCardBadgeText, { color: theme.accent }]}>
+                      {currentPartyCard.tone}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.partyCardPrompt}>{currentPartyCard.prompt}</Text>
+
+                <View style={styles.partyCardFooter}>
+                  <View>
+                    <Text style={styles.partyCardMetaLabel}>Suggested prize points</Text>
+                    <Text style={[styles.partyCardPoints, { color: theme.accent }]}>
+                      {currentPartyCard.points}
+                    </Text>
+                  </View>
+                  <Ionicons name="sparkles" size={28} color={theme.accent} />
+                </View>
+
+                <View style={styles.dareActions}>
+                  <Button
+                    title="Draw Card"
+                    variant="outline"
+                    color={theme.accent}
+                    onPress={drawPartyCard}
+                    style={styles.dareButton}
+                  />
+                  <Button
+                    title="Completed"
+                    variant="primary"
+                    color={theme.accent}
+                    onPress={completePartyCard}
+                    style={styles.dareButton}
+                  />
+                </View>
+              </Card.Content>
+            </Card>
+
+            {isOwner && (
+              <Card style={styles.sharedSpinCard}>
+                <Card.Content style={styles.sharedSpinContent}>
+                  <Text style={[styles.dareLabel, { color: theme.accent }]}>Organiser</Text>
+                  <Text style={styles.sharedSpinTitle}>Award Party Card Points</Text>
+                  <Text style={styles.spinnerHint}>
+                    Pick the crew member who completed the card or gave the best effort.
+                  </Text>
+                  <View style={styles.targetAwardGrid}>
+                    {pointAwardTargets.map((target) => (
+                      <TouchableOpacity
+                        key={target.id}
+                        style={[styles.targetAwardButton, { borderColor: theme.accent }]}
+                        onPress={() =>
+                          openPointAward({
+                            memberName: target.name,
+                            reason: `Party card: ${currentPartyCard.title}`,
+                            defaultPoints: String(currentPartyCard.points),
+                          })
+                        }
+                      >
+                        <Ionicons name="trophy" size={16} color={theme.accent} />
+                        <Text style={[styles.targetAwardText, { color: theme.accent }]}>{target.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </Card.Content>
+              </Card>
+            )}
+          </>
+        )}
+
         {selectedGameMode === 'purse' && (
           <Card style={[styles.missionCard, { borderColor: `${theme.accent}66` }]}>
             <Card.Content style={styles.missionContent}>
@@ -2102,6 +2261,60 @@ const styles = StyleSheet.create({
   },
   missionCard: {
     marginBottom: spacing.lg,
+  },
+  partyCard: {
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+  },
+  partyCardContent: {
+    padding: spacing.lg,
+  },
+  partyCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  partyCardTitle: {
+    ...typography.h2,
+    color: colors.text,
+  },
+  partyCardBadge: {
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.background,
+  },
+  partyCardBadgeText: {
+    ...typography.caption,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  partyCardPrompt: {
+    ...typography.h3,
+    color: colors.text,
+    lineHeight: 30,
+    marginBottom: spacing.lg,
+  },
+  partyCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  partyCardMetaLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+  },
+  partyCardPoints: {
+    ...typography.h2,
+    marginTop: spacing.xs,
   },
   missionContent: {
     padding: spacing.lg,

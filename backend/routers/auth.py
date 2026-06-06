@@ -169,6 +169,26 @@ async def owner_login(request: OwnerLoginRequest):
     if not event:
         raise HTTPException(status_code=401, detail="Invalid event name or owner PIN")
     require_paid_event(event)
+
+    await db.members.update_one(
+        {
+            "event_id": event["id"],
+            "name": event["owner_name"],
+            "role": "owner",
+        },
+        {
+            "$set": {
+                "event_id": event["id"],
+                "name": event["owner_name"],
+                "role": "owner",
+                "is_active": True,
+            },
+            "$setOnInsert": {
+                "joined_at": datetime.now(timezone.utc).isoformat(),
+            },
+        },
+        upsert=True,
+    )
     
     return AccessResponse(
         success=True,

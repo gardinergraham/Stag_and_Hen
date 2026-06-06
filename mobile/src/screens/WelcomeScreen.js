@@ -186,6 +186,17 @@ const WelcomeScreen = ({ navigation }) => {
           </View>
         )}
 
+        {Platform.OS === 'android' && (
+          <View style={styles.testerUpdateCard}>
+            <Text style={styles.testerUpdateEyebrow}>Tester Update</Text>
+            <Text style={styles.testerUpdateTitle}>Android 1.0.1 is ready to try</Text>
+            <Text style={styles.testerUpdateText}>
+              This build improves event payment return handling, package upgrade refreshes,
+              gallery access details, and the groundwork for watch-friendly QR sharing.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.buttons}>
           <Button
             title="Create an Event"
@@ -308,6 +319,30 @@ const styles = StyleSheet.create({
   },
   pendingButton: {
     marginTop: spacing.md,
+  },
+  testerUpdateCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.lg,
+    padding: spacing.md,
+  },
+  testerUpdateEyebrow: {
+    ...typography.caption,
+    color: colors.secondaryLight,
+    textTransform: 'uppercase',
+  },
+  testerUpdateTitle: {
+    ...typography.h3,
+    color: colors.text,
+    marginTop: spacing.xs,
+  },
+  testerUpdateText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
   },
 });
 

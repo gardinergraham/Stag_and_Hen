@@ -38,7 +38,8 @@ const MainTabs = () => {
   const { session } = useApp();
   const theme = getEventTheme(session?.event_type);
   const insets = useSafeAreaInsets();
-  const bottomInset = Math.max(insets.bottom, Platform.OS === 'android' ? 24 : 0);
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'android' ? 30 : 0);
+  const tabBarBaseHeight = Platform.OS === 'android' ? 74 : 62;
 
   return (
     <Tab.Navigator
@@ -47,8 +48,8 @@ const MainTabs = () => {
         tabBarStyle: [
           styles.tabBar,
           {
-            height: 62 + bottomInset,
-            paddingBottom: bottomInset + 8,
+            height: tabBarBaseHeight + bottomInset,
+            paddingBottom: bottomInset + (Platform.OS === 'android' ? 12 : 8),
           },
         ],
         tabBarShowLabel: false,
@@ -179,7 +180,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderTopColor: colors.border,
     borderTopWidth: 1,
-    paddingTop: 10,
+    paddingTop: Platform.OS === 'android' ? 8 : 10,
   },
   tabIcon: {
     alignItems: 'center',

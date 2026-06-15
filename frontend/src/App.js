@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import axios from "axios";
-import { Camera, Users, ShoppingBag, Wallet, QrCode, Shield, PartyPopper, Heart, Check, Smartphone, Apple, Plus, RefreshCw, Lock, ExternalLink, Save, Trash2, X, ClipboardList, Trophy, Gamepad2, Video, Target } from "lucide-react";
+import { Camera, Users, ShoppingBag, Wallet, QrCode, Shield, PartyPopper, Heart, Check, Smartphone, Plus, RefreshCw, Lock, ExternalLink, Save, Trash2, X, ClipboardList, Trophy, Gamepad2, Video, Target } from "lucide-react";
 import "@/App.css";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "https://stagandhen-production.up.railway.app";
@@ -8,6 +8,8 @@ const API_BASE_URL = `${BACKEND_URL}/api`;
 const ADMIN_USERNAME = "GrahamAdmin";
 const ADMIN_PASSWORD = "1234";
 const AMAZON_ASSOCIATE_TAG = "stagandhen-21";
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.stagandhen.app&hl=en_GB";
+const APP_STORE_URL = "https://apps.apple.com/gb/app/stag-and-hen/id6771895084";
 const heroBackgrounds = [
   {
     src: "/assets/images/henGirlsBack.webp",
@@ -284,23 +286,26 @@ const Download = () => (
       <h2>Get the <span className="gradient-text">App</span></h2>
       <p>Download now and start planning the ultimate stag or hen party!</p>
       <div className="download-buttons">
-        <a href="#" className="store-button" data-testid="android-download-btn">
-          <Smartphone size={32} />
-          <div className="store-info">
-            <span>Get it on</span>
-            <strong>Google Play</strong>
-          </div>
+        <a
+          href={PLAY_STORE_URL}
+          className="store-button store-badge"
+          data-testid="android-download-btn"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Get The Stag and Hen on Google Play"
+        >
+          <img src="/assets/images/google_badge.png" alt="Get it on Google Play" />
         </a>
-        <a href="#" className="store-button" data-testid="ios-download-btn">
-          <Apple size={32} />
-          <div className="store-info">
-            <span>Download on the</span>
-            <strong>App Store</strong>
-          </div>
+        <a
+          href={APP_STORE_URL}
+          className="store-button store-badge"
+          data-testid="ios-download-btn"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Download The Stag and Hen on the App Store"
+        >
+          <img src="/assets/images/apple_badge.png" alt="Download on the App Store" />
         </a>
-      </div>
-      <div className="coming-soon-badge" data-testid="coming-soon-badge">
-        Coming Soon to App Stores!
       </div>
     </div>
   </section>
@@ -336,8 +341,8 @@ const Footer = () => (
         <div className="footer-column">
           <h4>Download</h4>
           <ul>
-            <li><a href="#download">Android App</a></li>
-            <li><a href="#download">iOS App</a></li>
+            <li><a href={PLAY_STORE_URL} target="_blank" rel="noopener noreferrer">Android App</a></li>
+            <li><a href={APP_STORE_URL} target="_blank" rel="noopener noreferrer">iOS App</a></li>
           </ul>
         </div>
       </div>

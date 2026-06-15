@@ -7,12 +7,14 @@ import {
   Share,
   Alert,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 import { colors, typography, spacing } from '../theme';
 import { Card, Button } from '../components';
 import { eventsApi } from '../services/api';
 import { useApp } from '../context/AppContext';
 import { formatEventDateRange } from '../utils/eventDates';
+import { buildWatchInvitePayload } from '../utils/watchPayload';
 
 const ShareQRScreen = () => {
   const { session } = useApp();
@@ -58,6 +60,20 @@ const ShareQRScreen = () => {
     } catch (error) {
       console.error('Share failed:', error);
     }
+  };
+
+  const handleCopyWatchPayload = async () => {
+    const payload = buildWatchInvitePayload({ session, qrData });
+    if (!payload) {
+      Alert.alert('Watch Payload Unavailable', 'Generate the QR invite first.');
+      return;
+    }
+
+    await Clipboard.setStringAsync(JSON.stringify(payload, null, 2));
+    Alert.alert(
+      'Watch Payload Copied',
+      'The Apple Watch invite and game payload has been copied for TestFlight/native watch testing.'
+    );
   };
 
   if (loading) {
@@ -115,6 +131,13 @@ const ShareQRScreen = () => {
           size="large"
           onPress={handleShare}
           style={styles.shareButton}
+        />
+        <Button
+          title="Copy Watch Payload"
+          variant="outline"
+          size="medium"
+          onPress={handleCopyWatchPayload}
+          style={styles.watchButton}
         />
       </View>
     </SafeAreaView>
@@ -211,6 +234,9 @@ const styles = StyleSheet.create({
   },
   shareButton: {
     marginTop: 'auto',
+  },
+  watchButton: {
+    marginTop: spacing.md,
   },
 });
 

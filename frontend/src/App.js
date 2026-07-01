@@ -55,6 +55,10 @@ const emptyDrinkCardForm = {
   text: "",
   event_type: "all",
 };
+const emptySayItPhraseForm = {
+  text: "",
+  event_type: "all",
+};
 const emptySpinnerPairForm = {
   title: "",
   left: "",
@@ -659,6 +663,8 @@ const AdminPage = () => {
   const [selectedDare, setSelectedDare] = useState(null);
   const [drinkCardForm, setDrinkCardForm] = useState(emptyDrinkCardForm);
   const [selectedDrinkCard, setSelectedDrinkCard] = useState(null);
+  const [sayItPhraseForm, setSayItPhraseForm] = useState(emptySayItPhraseForm);
+  const [selectedSayItPhrase, setSelectedSayItPhrase] = useState(null);
   const [spinnerPairs, setSpinnerPairs] = useState([]);
   const [spinnerPairForm, setSpinnerPairForm] = useState(emptySpinnerPairForm);
   const [selectedSpinnerPair, setSelectedSpinnerPair] = useState(null);
@@ -726,6 +732,10 @@ const AdminPage = () => {
     setDrinkCardForm((current) => ({ ...current, [key]: value }));
   };
 
+  const updateSayItPhraseForm = (key, value) => {
+    setSayItPhraseForm((current) => ({ ...current, [key]: value }));
+  };
+
   const updateSpinnerPairForm = (key, value) => {
     setSpinnerPairForm((current) => ({ ...current, [key]: value }));
   };
@@ -761,6 +771,13 @@ const AdminPage = () => {
     setStatus("");
   };
 
+  const resetSayItPhraseForm = () => {
+    setSelectedSayItPhrase(null);
+    setSayItPhraseForm(emptySayItPhraseForm);
+    setError("");
+    setStatus("");
+  };
+
   const resetSpinnerPairForm = () => {
     setSelectedSpinnerPair(null);
     setSpinnerPairForm(emptySpinnerPairForm);
@@ -791,6 +808,16 @@ const AdminPage = () => {
     setDrinkCardForm({
       text: card.text || "",
       event_type: card.event_type || "all",
+    });
+    setError("");
+    setStatus("");
+  };
+
+  const selectSayItPhrase = (phrase) => {
+    setSelectedSayItPhrase(phrase);
+    setSayItPhraseForm({
+      text: phrase.text || "",
+      event_type: phrase.event_type || "all",
     });
     setError("");
     setStatus("");
@@ -1110,6 +1137,73 @@ const AdminPage = () => {
     }
   };
 
+  const handleSayItPhraseSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setStatus("");
+
+    if (!sayItPhraseForm.text.trim()) {
+      setError("Please add the phrase text.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        text: sayItPhraseForm.text.trim(),
+        category: "say_it",
+        event_type: sayItPhraseForm.event_type,
+        event_id: null,
+      };
+
+      if (selectedSayItPhrase) {
+        await axios.put(`${API_BASE_URL}/dares/${selectedSayItPhrase.id}`, payload, {
+          params: getAdminParams(),
+        });
+        setStatus("Say It phrase updated.");
+      } else {
+        await axios.post(`${API_BASE_URL}/dares/`, payload, {
+          params: getAdminParams(),
+        });
+        setStatus("Say It phrase added to the app.");
+      }
+
+      setSelectedSayItPhrase(null);
+      setSayItPhraseForm(emptySayItPhraseForm);
+      await loadShopData();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Could not save this phrase.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSayItPhraseDelete = async (phrase) => {
+    const confirmed = window.confirm(`Delete this Say It phrase?\n\n"${phrase.text}"`);
+    if (!confirmed) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setStatus("");
+    try {
+      await axios.delete(`${API_BASE_URL}/dares/${phrase.id}`, {
+        params: getAdminParams(),
+      });
+      if (selectedSayItPhrase?.id === phrase.id) {
+        setSelectedSayItPhrase(null);
+        setSayItPhraseForm(emptySayItPhraseForm);
+      }
+      setStatus("Say It phrase deleted.");
+      await loadShopData();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Could not delete this phrase.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSpinnerPairSubmit = async (event) => {
     event.preventDefault();
     setError("");
@@ -1247,8 +1341,9 @@ const AdminPage = () => {
     }
   };
 
-  const standardDares = dares.filter((dare) => dare.category !== "drinks");
+  const standardDares = dares.filter((dare) => dare.category !== "drinks" && dare.category !== "say_it");
   const drinkingGameCards = dares.filter((dare) => dare.category === "drinks");
+  const sayItGamePhrases = dares.filter((dare) => dare.category === "say_it");
 
   if (!isAuthed) {
     return (
@@ -1625,6 +1720,86 @@ const AdminPage = () => {
                   </button>
                   <div className="admin-product-actions">
                     <button type="button" onClick={() => handleDrinkCardDelete(card)} aria-label="Delete party card">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </aside>
+      </section>
+
+      <section className="admin-layout admin-dares-section">
+        <form className="admin-card admin-form" onSubmit={handleSayItPhraseSubmit}>
+          <div className="admin-card-header">
+            {selectedSayItPhrase ? <Save size={20} /> : <Plus size={20} />}
+            <div>
+              <p>{selectedSayItPhrase ? "Editing Say It Phrase" : "New Say It Phrase"}</p>
+              <h1>{selectedSayItPhrase ? "Update Phrase" : "Add Say It Phrase"}</h1>
+            </div>
+          </div>
+
+          <label>
+            Phrase
+            <textarea
+              value={sayItPhraseForm.text}
+              onChange={(event) => updateSayItPhraseForm("text", event.target.value)}
+              placeholder='e.g., "You did what?"'
+              rows={3}
+              maxLength={500}
+            />
+            <span className="admin-field-hint">
+              Players will perform this phrase in all six voices: supportive, angry, flirty, shocked, disappointed, and scared.
+            </span>
+          </label>
+
+          <label>
+            Event Type
+            <select value={sayItPhraseForm.event_type} onChange={(event) => updateSayItPhraseForm("event_type", event.target.value)}>
+              <option value="all">All</option>
+              <option value="stag">Stag</option>
+              <option value="hen">Hen</option>
+            </select>
+          </label>
+
+          <div className="admin-form-actions">
+            <button className="btn btn-primary admin-submit" type="submit" disabled={saving}>
+              {selectedSayItPhrase ? <Save size={18} /> : <Plus size={18} />}
+              {saving ? "Saving" : selectedSayItPhrase ? "Update Phrase" : "Add Phrase"}
+            </button>
+            {selectedSayItPhrase && (
+              <button className="btn btn-secondary admin-submit" type="button" onClick={resetSayItPhraseForm}>
+                <X size={18} />
+                Cancel Edit
+              </button>
+            )}
+          </div>
+        </form>
+
+        <aside className="admin-card admin-preview">
+          <div className="admin-card-header">
+            <Gamepad2 size={20} />
+            <div>
+              <p>Say It Six Ways</p>
+              <h2>{sayItGamePhrases.length} Admin Phrases</h2>
+            </div>
+          </div>
+          <div className="admin-product-list admin-dare-list">
+            {sayItGamePhrases.length === 0 ? (
+              <p className="admin-empty-text">No additional phrases have been added yet.</p>
+            ) : (
+              sayItGamePhrases.map((phrase) => (
+                <article
+                  className={`admin-product-row ${selectedSayItPhrase?.id === phrase.id ? "admin-product-row-selected" : ""}`}
+                  key={phrase.id}
+                >
+                  <button className="admin-request-main" type="button" onClick={() => selectSayItPhrase(phrase)}>
+                    <h3>"{phrase.text}"</h3>
+                    <p>say it six ways · {phrase.event_type}</p>
+                  </button>
+                  <div className="admin-product-actions">
+                    <button type="button" onClick={() => handleSayItPhraseDelete(phrase)} aria-label="Delete Say It phrase">
                       <Trash2 size={16} />
                     </button>
                   </div>

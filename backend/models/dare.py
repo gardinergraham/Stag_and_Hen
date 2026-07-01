@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import uuid
 
 
-DareCategory = Literal["warmup", "photo", "cheeky", "drinks"]
+DareCategory = Literal["warmup", "photo", "cheeky", "drinks", "say_it"]
 DareEventType = Literal["all", "stag", "hen"]
 
 

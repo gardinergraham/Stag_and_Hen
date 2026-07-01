@@ -128,6 +128,13 @@ const gameModes = [
     category: null,
   },
   {
+    id: 'sayIt',
+    title: 'Say It Six Ways',
+    subtitle: 'One phrase, six emotions',
+    icon: 'chatbubbles',
+    category: null,
+  },
+  {
     id: 'photo',
     title: 'Photo Challenges',
     subtitle: 'Create gallery moments',
@@ -156,6 +163,57 @@ const messagePrompts = [
   'Future wishes',
   'Toast',
   'Prediction',
+];
+
+const sayItPhrases = [
+  'You shaved your bush?',
+  'Is that it?',
+  'Is it all in?',
+];
+
+const sayItEmotions = [
+  {
+    id: 'supportive',
+    label: 'Supportive',
+    icon: 'heart',
+    color: '#22C55E',
+    prompt: 'Say it like you completely approve.',
+  },
+  {
+    id: 'angry',
+    label: 'Angry',
+    icon: 'flame',
+    color: '#EF4444',
+    prompt: 'Say it like this is the final straw.',
+  },
+  {
+    id: 'flirty',
+    label: 'Flirty',
+    icon: 'heart-circle',
+    color: '#FF1493',
+    prompt: 'Make it sound cheeky and suggestive.',
+  },
+  {
+    id: 'shocked',
+    label: 'Shocked',
+    icon: 'flash',
+    color: '#FACC15',
+    prompt: 'Say it like you cannot believe your ears.',
+  },
+  {
+    id: 'disappointed',
+    label: 'Disappointed',
+    icon: 'sad',
+    color: '#8B5CF6',
+    prompt: 'Say it like you expected so much more.',
+  },
+  {
+    id: 'scared',
+    label: 'Scared',
+    icon: 'warning',
+    color: '#00B7FF',
+    prompt: 'Say it like the answer genuinely terrifies you.',
+  },
 ];
 
 const henGameModes = [
@@ -315,6 +373,8 @@ const DaresScreen = ({ navigation }) => {
   const [awardReason, setAwardReason] = useState('');
   const [awardingPoints, setAwardingPoints] = useState(false);
   const [selectedMessagePrompt, setSelectedMessagePrompt] = useState(messagePrompts[0]);
+  const [sayItPhraseIndex, setSayItPhraseIndex] = useState(0);
+  const [sayItEmotionIndex, setSayItEmotionIndex] = useState(0);
   const [uploadingMessage, setUploadingMessage] = useState(false);
   const [spinning, setSpinning] = useState(false);
   const wheelRotation = useRef(new Animated.Value(0)).current;
@@ -469,6 +529,19 @@ const DaresScreen = ({ navigation }) => {
     points,
     items: purseItems.filter((item) => item.points === points),
   }));
+  const availableSayItPhrases = [
+    ...sayItPhrases,
+    ...customDares
+      .filter((dare) => dare.category === 'say_it')
+      .map((dare) => dare.text?.trim())
+      .filter(Boolean),
+  ].filter(
+    (phrase, index, phrases) =>
+      phrases.findIndex((candidate) => candidate.toLowerCase() === phrase.toLowerCase()) === index
+  );
+  const currentSayItPhrase =
+    availableSayItPhrases[sayItPhraseIndex % availableSayItPhrases.length] || sayItPhrases[0];
+  const currentSayItEmotion = sayItEmotions[sayItEmotionIndex];
 
   const spinCrewWheel = () => {
     if (spinning) return;
@@ -565,6 +638,19 @@ const DaresScreen = ({ navigation }) => {
     if (mode.category) {
       spinDare(mode.category);
     }
+  };
+
+  const nextSayItPhrase = () => {
+    setSayItPhraseIndex((current) => (current + 1) % availableSayItPhrases.length);
+    setSayItEmotionIndex(0);
+  };
+
+  const advanceSayItRound = () => {
+    if (sayItEmotionIndex === sayItEmotions.length - 1) {
+      nextSayItPhrase();
+      return;
+    }
+    setSayItEmotionIndex((current) => current + 1);
   };
 
   const drawSecretMission = async (forceNew = false) => {
@@ -1395,6 +1481,87 @@ const DaresScreen = ({ navigation }) => {
           </Card>
         )}
 
+        {selectedGameMode === 'sayIt' && (
+          <Card style={[styles.sayItCard, { borderColor: `${theme.accent}66` }]}>
+            <Card.Content style={styles.missionContent}>
+              <View style={styles.missionHeader}>
+                <View style={styles.sayItHeaderText}>
+                  <Text style={[styles.dareLabel, { color: theme.accent }]}>Performance Game</Text>
+                  <Text style={styles.missionTitle}>Say It Six Ways</Text>
+                </View>
+                <Ionicons name="chatbubbles" size={24} color={theme.accent} />
+              </View>
+
+              <Text style={styles.sayItInstructions}>
+                Pass the phone around. Each player says the phrase using the highlighted emotion, then move to the next voice.
+              </Text>
+
+              <View style={[styles.sayItPhraseBox, { borderColor: theme.accent }]}>
+                <Text style={[styles.sayItCounter, { color: theme.accent }]}>
+                  Phrase {(sayItPhraseIndex % availableSayItPhrases.length) + 1} of {availableSayItPhrases.length}
+                </Text>
+                <Text style={styles.sayItPhrase}>"{currentSayItPhrase}"</Text>
+              </View>
+
+              <Text style={styles.sayItSectionTitle}>Choose the voice</Text>
+              <View style={styles.sayItEmotionGrid}>
+                {sayItEmotions.map((emotion, index) => {
+                  const active = index === sayItEmotionIndex;
+                  return (
+                    <TouchableOpacity
+                      key={emotion.id}
+                      style={[
+                        styles.sayItEmotionButton,
+                        active && {
+                          borderColor: emotion.color,
+                          backgroundColor: `${emotion.color}22`,
+                        },
+                      ]}
+                      onPress={() => setSayItEmotionIndex(index)}
+                    >
+                      <Ionicons
+                        name={emotion.icon}
+                        size={20}
+                        color={active ? emotion.color : colors.textMuted}
+                      />
+                      <Text style={[styles.sayItEmotionText, active && { color: emotion.color }]}>
+                        {index + 1}. {emotion.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View style={[styles.sayItPromptBox, { borderColor: currentSayItEmotion.color }]}>
+                <Ionicons name={currentSayItEmotion.icon} size={28} color={currentSayItEmotion.color} />
+                <View style={styles.sayItPromptText}>
+                  <Text style={[styles.sayItNowLabel, { color: currentSayItEmotion.color }]}>
+                    Now say it {currentSayItEmotion.label.toLowerCase()}
+                  </Text>
+                  <Text style={styles.sayItPrompt}>{currentSayItEmotion.prompt}</Text>
+                </View>
+              </View>
+
+              <View style={styles.dareActions}>
+                <Button
+                  title="Different Phrase"
+                  variant="outline"
+                  color={theme.accent}
+                  onPress={nextSayItPhrase}
+                  style={styles.dareButton}
+                />
+                <Button
+                  title={sayItEmotionIndex === sayItEmotions.length - 1 ? 'Next Phrase' : 'Next Emotion'}
+                  variant="primary"
+                  color={theme.accent}
+                  onPress={advanceSayItRound}
+                  style={styles.dareButton}
+                />
+              </View>
+            </Card.Content>
+          </Card>
+        )}
+
         {selectedGameMode === 'partyCards' && (
           <>
             <Card style={[styles.partyCard, { borderColor: `${theme.accent}88` }]}>
@@ -1741,7 +1908,7 @@ const DaresScreen = ({ navigation }) => {
               <Text style={[styles.photoProofText, { color: theme.accent }]}>Manage Owner Activities</Text>
             </TouchableOpacity>
           )}
-          {selectedGameMode !== 'spinner' && selectedGameMode !== 'missions' && selectedGameMode !== 'messages' && selectedGameMode !== 'purse' && selectedGameMode !== 'brideQuiz' && (
+          {selectedGameMode !== 'spinner' && selectedGameMode !== 'missions' && selectedGameMode !== 'messages' && selectedGameMode !== 'sayIt' && selectedGameMode !== 'purse' && selectedGameMode !== 'brideQuiz' && (
             <TouchableOpacity
               style={[styles.photoProofButton, { borderColor: theme.accent }]}
               onPress={() => navigation.navigate('Gallery')}
@@ -1752,7 +1919,7 @@ const DaresScreen = ({ navigation }) => {
           )}
         </View>
 
-        {selectedGameMode !== 'spinner' && selectedGameMode !== 'missions' && selectedGameMode !== 'messages' && selectedGameMode !== 'purse' && selectedGameMode !== 'brideQuiz' && (
+        {selectedGameMode !== 'spinner' && selectedGameMode !== 'missions' && selectedGameMode !== 'messages' && selectedGameMode !== 'sayIt' && selectedGameMode !== 'purse' && selectedGameMode !== 'brideQuiz' && (
           <>
         <Text style={styles.sectionTitle}>Recently Completed</Text>
         {completed.length === 0 ? (
@@ -2262,6 +2429,9 @@ const styles = StyleSheet.create({
   missionCard: {
     marginBottom: spacing.lg,
   },
+  sayItCard: {
+    marginBottom: spacing.lg,
+  },
   partyCard: {
     marginBottom: spacing.lg,
     borderWidth: 1,
@@ -2329,6 +2499,87 @@ const styles = StyleSheet.create({
   missionTitle: {
     ...typography.h2,
     color: colors.text,
+  },
+  sayItHeaderText: {
+    flex: 1,
+  },
+  sayItInstructions: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    lineHeight: 21,
+    marginBottom: spacing.lg,
+  },
+  sayItPhraseBox: {
+    borderWidth: 1,
+    borderRadius: 14,
+    backgroundColor: colors.background,
+    padding: spacing.xl,
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  sayItCounter: {
+    ...typography.caption,
+    textTransform: 'uppercase',
+    fontWeight: '800',
+    marginBottom: spacing.sm,
+  },
+  sayItPhrase: {
+    ...typography.h1,
+    color: colors.text,
+    textAlign: 'center',
+    lineHeight: 38,
+  },
+  sayItSectionTitle: {
+    ...typography.h3,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  sayItEmotionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  sayItEmotionButton: {
+    width: '48%',
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: colors.background,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  sayItEmotionText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    fontWeight: '700',
+    flex: 1,
+  },
+  sayItPromptBox: {
+    borderWidth: 1,
+    borderRadius: 14,
+    backgroundColor: colors.background,
+    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  sayItPromptText: {
+    flex: 1,
+  },
+  sayItNowLabel: {
+    ...typography.h3,
+    marginBottom: spacing.xs,
+  },
+  sayItPrompt: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+    lineHeight: 20,
   },
   secretMissionBox: {
     borderWidth: 1,
